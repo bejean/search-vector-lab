@@ -43,7 +43,7 @@ Le parcours se suit dans l'ordre ; compter deux à trois heures. Chaque étape d
 - **Pourquoi** : l'explication ;
 - 📸 : la copie d'écran à prendre, à enregistrer dans `captures/` sous le nom indiqué. Chaque consigne dit **où** la prendre, **ce qui doit être visible**, le **cadrage**, et **ce qu'elle montre** dans l'article. Règles communes :
   - navigateur : fenêtre de 1440 × 900, zoom 100 %, barre d'adresse visible (elle montre l'URL), un seul onglet ; capturer la fenêtre entière ;
-  - console Dev Tools : la requête à gauche, la réponse à droite, sans autre requête dans le panneau de gauche (effacer les précédentes) ; un tableau de 384 nombres se replie avec la flèche de la marge, à gauche du numéro de ligne, pour que la requête tienne à l'écran ;
+  - console Dev Tools : la requête à gauche, la réponse à droite, sans autre requête dans le panneau de gauche (effacer les précédentes) ; pour que la requête tienne à l'écran, le vecteur de 384 nombres passe par une variable dans Kibana et se replie avec la flèche de la marge dans Dashboards (étape 5) ;
   - terminal : au moins 120 colonnes, police lisible, `clear` avant les commandes ; la commande tapée doit apparaître au-dessus de sa sortie ; cadrer de la première commande à la dernière ligne de sortie.
 
 Note tes observations dans `notes/01-recherche-vectorielle.md` (une section par étape) : l'article sera écrit à partir d'elles. Ce fichier est personnel : le dossier `notes/` est ignoré par Git et ne part pas dans le dépôt public. S'il n'existe pas, `make notes` le crée à partir du modèle `parcours/01-notes-modele.md`.
@@ -295,9 +295,13 @@ Dans Kibana, la vue détaillée par champ : `POST wikipedia/_disk_usage?run_expe
 **À faire** : obtenir le vecteur d'une requête, puis le coller dans chaque interface.
 ```bash
 make -s vecteur Q="fromage à pâte molle" > /tmp/v.json                    # sur une ligne, pour curl
-make -s vecteur Q="fromage à pâte molle" LIGNES=1 > /tmp/v-lignes.json    # un nombre par ligne, pour les consoles
+make -s vecteur Q="fromage à pâte molle" LIGNES=1 > /tmp/v-lignes.json    # un nombre par ligne, pour Dashboards
 ```
-Dans les consoles Dev Tools, coller le contenu de `/tmp/v-lignes.json` (ouvert dans l'éditeur de texte) à la place de `[ …coller le vecteur… ]`, puis replier le tableau avec la flèche de la marge, sur la ligne qui l'ouvre : la requête tient alors à l'écran. Le paramètre `filter_path` réduit la réponse aux scores et aux titres, pour voir les dix résultats d'un coup.
+Pour que la requête reste lisible dans les consoles :
+- **Kibana** : ouvrir le panneau *Variables* (en bas de la console), créer une variable `vecteur` et lui donner pour valeur le contenu de `/tmp/v.json` (ouvert dans l'éditeur de texte). Dans la requête, `"${vecteur}"` est remplacé par le tableau : les guillemets qui l'entourent sont retirés à l'envoi. Pour changer de requête, il suffit de modifier la variable. L'éditeur de la console de Kibana 9.3 ne permet pas de replier un tableau.
+- **Dashboards** : coller le contenu de `/tmp/v-lignes.json` à la place de `[ …coller le vecteur… ]`, puis replier le tableau avec la flèche de la marge, sur la ligne qui l'ouvre. La console de Dashboards n'a pas de variables.
+
+Le paramètre `filter_path` réduit la réponse aux scores et aux titres, pour voir les dix résultats d'un coup.
 
 *Solr* (terminal ; dans l'interface, onglet *Query*, mettre la même chose dans `q`) :
 ```bash
@@ -311,7 +315,7 @@ curl -s localhost:8983/solr/wikipedia/select \
 ```
 POST wikipedia/_search?filter_path=hits.hits._score,hits.hits._source
 {
-  "knn": { "field": "vecteur", "query_vector": [ …coller le vecteur… ], "k": 10, "num_candidates": 100 },
+  "knn": { "field": "vecteur", "query_vector": "${vecteur}", "k": 10, "num_candidates": 100 },
   "_source": ["titre", "theme"]
 }
 ```
@@ -356,7 +360,7 @@ make comparer Q="peintre de paysages norvégien"
     ```
     POST wikipedia/_search?filter_path=hits.hits._score,hits.hits._source
     {
-      "knn": { "field": "vecteur", "query_vector": [ … ], "k": 10, "num_candidates": 100,
+      "knn": { "field": "vecteur", "query_vector": "${vecteur}", "k": 10, "num_candidates": 100,
                "rescore_vector": { "oversample": 10 } },
       "_source": ["titre"]
     }
@@ -372,12 +376,12 @@ make comparer Q="peintre de paysages norvégien"
 
 📸 `05-es-knn.png`
 - **Où** : la console de Kibana.
-- **Visible** : à gauche, la requête `POST wikipedia/_search?filter_path=…` avec `knn`, le tableau `query_vector` replié (une seule ligne visible), `k`, `num_candidates` ; à droite, la réponse réduite par `filter_path` : les dix `_score` et `titre`.
+- **Visible** : à gauche, la requête `POST wikipedia/_search?filter_path=…` avec `knn`, `"query_vector": "${vecteur}"`, `k`, `num_candidates` ; à droite, la réponse réduite par `filter_path` : les dix `_score` et `titre`.
 - **Montre** : la même requête dans Elasticsearch.
 
 📸 `05-os-knn.png`
 - **Où** : la console de Dashboards.
-- **Visible** : comme pour Kibana : la requête `knn` avec `filter_path` et le vecteur replié à gauche, les dix scores et titres à droite.
+- **Visible** : la requête `knn` avec `filter_path` et le vecteur replié à gauche (une seule ligne visible), les dix scores et titres à droite.
 - **Montre** : la même requête dans OpenSearch.
 
 📸 `05-comparer.png`
@@ -408,7 +412,7 @@ Puis, dans Kibana, la même recherche avec un **post-filtre** :
 ```
 POST wikipedia/_search?filter_path=hits.total,hits.hits._score,hits.hits._source
 {
-  "knn": { "field": "vecteur", "query_vector": [ … ], "k": 10, "num_candidates": 100 },
+  "knn": { "field": "vecteur", "query_vector": "${vecteur}", "k": 10, "num_candidates": 100 },
   "post_filter": { "term": { "theme": "vin" } },
   "_source": ["titre", "theme"]
 }
@@ -433,7 +437,7 @@ curl -s localhost:8983/solr/wikipedia/select \
 
 📸 `06-postfiltre-es.png`
 - **Où** : la console de Kibana.
-- **Visible** : à gauche, la requête avec `knn` (vecteur replié) et `post_filter` ; à droite, la réponse réduite par `filter_path` : `"total": { "value": 0, … }` et aucun document.
+- **Visible** : à gauche, la requête avec `knn` (`"query_vector": "${vecteur}"`) et `post_filter` ; à droite, la réponse réduite par `filter_path` : `"total": { "value": 0, … }` et aucun document.
 - **Montre** : un post-filtre peut ne laisser aucun résultat.
 
 **Mes notes** : dans `notes/01-recherche-vectorielle.md`, section « Étape 6 : filtrer ».

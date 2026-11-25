@@ -1,8 +1,8 @@
 """Affiche le vecteur d'une requête (préfixe E5 « query: »), à coller dans une requête kNN.
 
 Usage : docker compose run --rm outils python outils/vecteur_requete.py "fromage à pâte molle" [--lignes]
-Avec --lignes, un nombre par ligne : collé dans la console Dev Tools de Kibana ou de Dashboards,
-le tableau se replie alors avec la flèche de la marge (un tableau sur une seule ligne ne se replie pas).
+Avec --lignes, un nombre par ligne : collé dans la console Dev Tools de Dashboards, le tableau
+se replie alors avec la flèche de la marge (la console de Kibana ne replie pas : y passer par une variable).
 """
 import json
 import sys
