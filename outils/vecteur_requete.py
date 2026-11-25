@@ -1,14 +1,17 @@
 """Affiche le vecteur d'une requête (préfixe E5 « query: »), à coller dans une requête kNN.
 
-Usage : docker compose run --rm outils python outils/vecteur_requete.py "fromage à pâte molle"
+Usage : docker compose run --rm outils python outils/vecteur_requete.py "fromage à pâte molle" [--lignes]
+Avec --lignes, un nombre par ligne : collé dans la console Dev Tools de Kibana ou de Dashboards,
+le tableau se replie alors avec la flèche de la marge (un tableau sur une seule ligne ne se replie pas).
 """
 import json
 import sys
 
 import requests
 
-if len(sys.argv) != 2:
+args = [a for a in sys.argv[1:] if a != "--lignes"]
+if len(args) != 1:
     sys.exit(__doc__)
-r = requests.post("http://tei:80/embed", json={"inputs": f"query: {sys.argv[1]}", "normalize": True}, timeout=60)
+r = requests.post("http://tei:80/embed", json={"inputs": f"query: {args[0]}", "normalize": True}, timeout=60)
 r.raise_for_status()
-print(json.dumps([round(x, 6) for x in r.json()[0]]))
+print(json.dumps([round(x, 6) for x in r.json()[0]], indent=2 if "--lignes" in sys.argv else None))

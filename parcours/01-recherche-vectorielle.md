@@ -294,19 +294,22 @@ Dans Kibana, la vue détaillée par champ : `POST wikipedia/_disk_usage?run_expe
 
 **À faire** : obtenir le vecteur d'une requête, puis le coller dans chaque interface.
 ```bash
-make -s vecteur Q="fromage à pâte molle" > /tmp/v.json
+make -s vecteur Q="fromage à pâte molle" > /tmp/v.json                    # sur une ligne, pour curl
+make -s vecteur Q="fromage à pâte molle" LIGNES=1 > /tmp/v-lignes.json    # un nombre par ligne, pour les consoles
 ```
+Dans les consoles Dev Tools, coller le contenu de `/tmp/v-lignes.json` (ouvert dans l'éditeur de texte) à la place de `[ …coller le vecteur… ]`, puis replier le tableau avec la flèche de la marge, sur la ligne qui l'ouvre : la requête tient alors à l'écran. Le paramètre `filter_path` réduit la réponse aux scores et aux titres, pour voir les dix résultats d'un coup.
 
 *Solr* (terminal ; dans l'interface, onglet *Query*, mettre la même chose dans `q`) :
 ```bash
 curl -s localhost:8983/solr/wikipedia/select \
   --data-urlencode 'q={!knn f=vecteur topK=10}'"$(cat /tmp/v.json)" \
-  --data-urlencode "fl=titre,theme,score"
+  --data-urlencode "fl=titre,theme,score" --data-urlencode "wt=csv"
 ```
+`wt=csv` donne une ligne par document ; sans lui, la réponse est en JSON.
 
 *Elasticsearch* (Kibana) :
 ```
-POST wikipedia/_search
+POST wikipedia/_search?filter_path=hits.hits._score,hits.hits._source
 {
   "knn": { "field": "vecteur", "query_vector": [ …coller le vecteur… ], "k": 10, "num_candidates": 100 },
   "_source": ["titre", "theme"]
@@ -315,7 +318,7 @@ POST wikipedia/_search
 
 *OpenSearch* (Dashboards) :
 ```
-POST wikipedia/_search
+POST wikipedia/_search?filter_path=hits.hits._score,hits.hits._source
 {
   "query": { "knn": { "vecteur": { "vector": [ …coller le vecteur… ], "k": 10 } } },
   "_source": ["titre", "theme"]
@@ -347,11 +350,11 @@ make comparer Q="peintre de paysages norvégien"
     make -s vecteur Q="les violons fabriqués à Crémone" > /tmp/v.json
     curl -s localhost:8983/solr/wikipedia/select \
       --data-urlencode 'q={!knn f=vecteur topK=10 efSearchScaleFactor=2}'"$(cat /tmp/v.json)" \
-      --data-urlencode "fl=titre,score"
+      --data-urlencode "fl=titre,score" --data-urlencode "wt=csv"
     ```
   - Elasticsearch : passer `num_candidates` de 100 à 500 ne change rien (toujours 8/10), car la perte ne vient pas du parcours du graphe mais de la quantification ; ajouter `"rescore_vector": { "oversample": 10 }` dans le `knn` donne 10/10. Dans Kibana :
     ```
-    POST wikipedia/_search
+    POST wikipedia/_search?filter_path=hits.hits._score,hits.hits._source
     {
       "knn": { "field": "vecteur", "query_vector": [ … ], "k": 10, "num_candidates": 100,
                "rescore_vector": { "oversample": 10 } },
@@ -369,12 +372,12 @@ make comparer Q="peintre de paysages norvégien"
 
 📸 `05-es-knn.png`
 - **Où** : la console de Kibana.
-- **Visible** : à gauche, la requête `POST wikipedia/_search` avec `knn` (tableau `query_vector` replié), `k`, `num_candidates` ; à droite, le début de `hits.hits` avec les titres et les `_score` des premiers résultats.
+- **Visible** : à gauche, la requête `POST wikipedia/_search?filter_path=…` avec `knn`, le tableau `query_vector` replié (une seule ligne visible), `k`, `num_candidates` ; à droite, la réponse réduite par `filter_path` : les dix `_score` et `titre`.
 - **Montre** : la même requête dans Elasticsearch.
 
 📸 `05-os-knn.png`
 - **Où** : la console de Dashboards.
-- **Visible** : comme pour Kibana : la requête `knn` (vecteur replié) à gauche, les premiers résultats et leurs scores à droite.
+- **Visible** : comme pour Kibana : la requête `knn` avec `filter_path` et le vecteur replié à gauche, les dix scores et titres à droite.
 - **Montre** : la même requête dans OpenSearch.
 
 📸 `05-comparer.png`
@@ -384,7 +387,7 @@ make comparer Q="peintre de paysages norvégien"
 
 📸 `05-rappel-corrige.png`
 - **Où** : le terminal, après `clear`.
-- **Visible** : la commande `curl` Solr avec `efSearchScaleFactor=2` et sa réponse, où figurent Rabâb égyptien et Vihuela (ou les documents manqués chez toi).
+- **Visible** : la commande `curl` Solr avec `efSearchScaleFactor=2` et sa réponse en CSV (dix lignes titre, score), où figurent Rabâb égyptien et Vihuela (ou les documents manqués chez toi).
 - **Montre** : un réglage suffit à retrouver les voisins manqués.
 
 **Mes notes** : dans `notes/01-recherche-vectorielle.md`, section « Étape 5 : interroger en kNN ».
@@ -403,7 +406,7 @@ Le filtre `theme = vin` est appliqué en préfiltre dans les trois moteurs : `fq
 
 Puis, dans Kibana, la même recherche avec un **post-filtre** :
 ```
-POST wikipedia/_search
+POST wikipedia/_search?filter_path=hits.total,hits.hits._score,hits.hits._source
 {
   "knn": { "field": "vecteur", "query_vector": [ … ], "k": 10, "num_candidates": 100 },
   "post_filter": { "term": { "theme": "vin" } },
@@ -414,7 +417,7 @@ Et dans Solr, un `fq` exclu du préfiltre :
 ```bash
 curl -s localhost:8983/solr/wikipedia/select \
   --data-urlencode 'q={!knn f=vecteur topK=10 excludeTags=t}'"$(cat /tmp/v.json)" \
-  --data-urlencode 'fq={!tag=t}theme:vin' --data-urlencode "fl=titre,theme,score"
+  --data-urlencode 'fq={!tag=t}theme:vin' --data-urlencode "fl=titre,theme,score" --data-urlencode "wt=csv"
 ```
 
 **À observer**
@@ -430,7 +433,7 @@ curl -s localhost:8983/solr/wikipedia/select \
 
 📸 `06-postfiltre-es.png`
 - **Où** : la console de Kibana.
-- **Visible** : à gauche, la requête avec `knn` (vecteur replié) et `post_filter` ; à droite, la réponse avec `"total": { "value": 0 }` et `"hits": []`.
+- **Visible** : à gauche, la requête avec `knn` (vecteur replié) et `post_filter` ; à droite, la réponse réduite par `filter_path` : `"total": { "value": 0, … }` et aucun document.
 - **Montre** : un post-filtre peut ne laisser aucun résultat.
 
 **Mes notes** : dans `notes/01-recherche-vectorielle.md`, section « Étape 6 : filtrer ».

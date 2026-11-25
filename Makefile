@@ -87,9 +87,9 @@ importer-crawl: ## Importe un corpus crawlé (ex : make importer-crawl DOSSIER=�
 similarites: ## Similarité cosinus entre textes via TEI (ex : make similarites T='"query: …" "passage: …"')
 	@$(OUTILS) outils/similarites.py $(T)
 
-vecteur: ## Affiche le vecteur d'une requête (ex : make vecteur Q="fromage à pâte molle" > /tmp/v.json)
-	@if [ -z "$(Q)" ]; then echo "$(RED)❌ Usage : make vecteur Q=\"texte\"$(NC)" >&2; exit 1; fi
-	@$(OUTILS) outils/vecteur_requete.py "$(Q)"
+vecteur: ## Vecteur d'une requête (ex : make -s vecteur Q="fromage" > /tmp/v.json ; LIGNES=1 : un nombre par ligne)
+	@if [ -z "$(Q)" ]; then echo "$(RED)❌ Usage : make vecteur Q=\"texte\" [LIGNES=1]$(NC)" >&2; exit 1; fi
+	@$(OUTILS) outils/vecteur_requete.py "$(Q)" $(if $(LIGNES),--lignes)
 
 comparer: ## Même kNN sur les trois moteurs (ex : make comparer Q="fromage" [K=10] [THEME=vin])
 	@if [ -z "$(Q)" ]; then echo "$(RED)❌ Usage : make comparer Q=\"texte\" [K=10] [THEME=nom]$(NC)"; exit 1; fi
