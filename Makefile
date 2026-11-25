@@ -16,7 +16,7 @@ VOLUMES_MOTEURS = search-vector-lab_solr-data search-vector-lab_es-data search-v
 .DEFAULT_GOAL := help
 .PHONY: help up down restart ps logs status \
 	outils wikipedia vectoriser indexer indexer-tous importer-crawl \
-	similarites vecteur comparer reset reset-tout
+	similarites vecteur comparer reset reset-tout notes
 
 help: ## Affiche cette aide
 	@awk 'BEGIN {FS = ":.*?## "; printf "\n$(GREEN)Commandes disponibles:$(NC)\n"} \
@@ -94,6 +94,12 @@ vecteur: ## Affiche le vecteur d'une requête (ex : make vecteur Q="fromage à p
 comparer: ## Même kNN sur les trois moteurs (ex : make comparer Q="fromage" [K=10] [THEME=vin])
 	@if [ -z "$(Q)" ]; then echo "$(RED)❌ Usage : make comparer Q=\"texte\" [K=10] [THEME=nom]$(NC)"; exit 1; fi
 	@$(OUTILS) outils/comparer.py "$(Q)" $(or $(K),10) $(THEME)
+
+##@ 📝 Notes
+notes: ## Crée le fichier de notes personnelles du parcours 1, s'il n'existe pas (notes/, ignoré par Git)
+	@mkdir -p notes
+	@if [ -e notes/01-recherche-vectorielle.md ]; then echo "notes/01-recherche-vectorielle.md existe déjà"; \
+	else cp parcours/01-notes-modele.md notes/01-recherche-vectorielle.md && echo "$(GREEN)✅ notes/01-recherche-vectorielle.md créé$(NC)"; fi
 
 ##@ 🧹 Remise à zéro
 reset: ## Arrête la stack et supprime les données des moteurs (garde le modèle de TEI)

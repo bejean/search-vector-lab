@@ -27,7 +27,7 @@ Ce parcours a deux buts :
   9. Avis du praticien et tableau de synthèse.
 - **Hors périmètre**, réservé aux articles suivants de la série : recherche hybride et RRF, quantification détaillée, reranking, découpage des documents en passages, RAG.
 - **Matière de l'article** :
-  - les rubriques **Mes notes** de chaque étape ;
+  - les notes prises à chaque étape (`notes/01-recherche-vectorielle.md`) ;
   - les copies d'écran de `captures/` ;
   - les requêtes de ce parcours ;
   - le bilan de l'étape 9.
@@ -46,7 +46,7 @@ Le parcours se suit dans l'ordre ; compter deux à trois heures. Chaque étape d
   - console Dev Tools : la requête à gauche, la réponse à droite, sans autre requête dans le panneau de gauche (effacer les précédentes) ; un tableau de 384 nombres se replie avec la flèche de la marge, à gauche du numéro de ligne, pour que la requête tienne à l'écran ;
   - terminal : au moins 120 colonnes, police lisible, `clear` avant les commandes ; la commande tapée doit apparaître au-dessus de sa sortie ; cadrer de la première commande à la dernière ligne de sortie.
 
-Note tes observations sous chaque étape, dans la rubrique **Mes notes** : l'article sera écrit à partir d'elles.
+Note tes observations dans `notes/01-recherche-vectorielle.md` (une section par étape) : l'article sera écrit à partir d'elles. Ce fichier est personnel : le dossier `notes/` est ignoré par Git et ne part pas dans le dépôt public. S'il n'existe pas, `make notes` le crée à partir du modèle `parcours/01-notes-modele.md`.
 
 | Service | Adresse depuis l'hôte |
 |---|---|
@@ -97,7 +97,7 @@ La console Dev Tools de Kibana et celle de Dashboards gardent leur contenu dans 
 - **Visible** : l'exemple `GET _search`, tel quel.
 - **Montre** : l'outil équivalent pour OpenSearch.
 
-**Mes notes**
+**Mes notes** : dans `notes/01-recherche-vectorielle.md`, section « Étape 1 : démarrer le laboratoire ».
 
 ---
 
@@ -127,13 +127,18 @@ make similarites T='"query: spécialité normande au lait cru" "passage: Le came
 
 **Pourquoi** : le modèle projette un texte dans un espace où des sens proches donnent des vecteurs proches. Les vecteurs sont normalisés (norme 1) : le cosinus se réduit alors à un produit scalaire. La recherche vectorielle consiste à trouver les k vecteurs les plus proches de celui de la requête, sans mot commun nécessaire.
 
+**Pourquoi 384 dimensions ?** Ce n'est pas une propriété des vecteurs en général : c'est la taille de sortie du modèle, fixée par son architecture. Les « petits » modèles (E5 small, MiniLM) produisent 384 dimensions, les modèles « base » 768, les « large » 1 024 ; les modèles d'OpenAI vont de 1 536 à 3 072. Plus de dimensions permettent de capter plus de nuances, mais coûtent plus en mémoire et en calcul. Conséquences pratiques :
+- le champ vectoriel est déclaré avec la dimension exacte du modèle (étape 3) ;
+- la requête et les documents doivent être vectorisés par le même modèle ;
+- changer de modèle impose de tout revectoriser et réindexer.
+
 📸 `02-similarites.png`
 - **Où** : le terminal, après `clear`.
 - **Visible** : les trois commandes `make similarites` de cette étape (avec préfixes, sans préfixes, sans mot commun) et leurs sorties, soit trois fois deux scores. Les lignes « Container … Creating/Created » peuvent rester.
 - **Cadrage** : de la première commande à la dernière ligne de sortie ; aucune ligne coupée.
 - **Montre** : le camembert est toujours plus proche que Jupiter, les scores E5 sont resserrés vers le haut, et les préfixes modifient les écarts.
 
-**Mes notes**
+**Mes notes** : dans `notes/01-recherche-vectorielle.md`, section « Étape 2 : des vecteurs à la main ».
 
 ---
 
@@ -207,6 +212,8 @@ GET wikipedia/_mapping
 
 **Pourquoi** : HNSW (Hierarchical Navigable Small World) est un graphe de voisinage parcouru de proche en proche : la recherche est approchée (elle peut manquer un voisin) mais rapide. Les trois moteurs partagent le principe ; ils diffèrent par le stockage des vecteurs et la quantification.
 
+**La quantification en quelques mots** : stocker chaque nombre du vecteur sur moins de bits. Un `float` occupe 32 bits ; en `int8`, 8 bits (4 fois moins de mémoire) ; en `int4`, 4 bits (8 fois moins) ; en binaire, 1 bit, le seul signe du nombre (32 fois moins). On perd en précision : le score calculé sur les vecteurs quantifiés est approché. Pour compenser, le moteur prend plus de candidats que demandé (*oversample*), puis recalcule leur score avec les vecteurs complets (*rescoring*). BBQ (*Better Binary Quantization*) est la quantification binaire d'Elasticsearch, avec un oversample de 3 par défaut.
+
 | Notion | Solr | Elasticsearch | OpenSearch |
 |---|---|---|---|
 | Type de champ | `solr.DenseVectorField` | `dense_vector` | `knn_vector` (+ `index.knn: true`) |
@@ -229,10 +236,16 @@ GET wikipedia/_mapping
 
 📸 `03-solr-schema.png`
 - **Où** : http://localhost:8983/solr/, menu de gauche : sélectionner la collection `wikipedia`, puis *Schema* ; dans la liste déroulante, choisir le champ `vecteur`.
-- **Visible** : les propriétés du champ et de son type `knn_vector_384` (classe `solr.DenseVectorField`, `vectorDimension` 384, `similarityFunction` cosine, `hnswM`, `hnswEfConstruction`).
-- **Montre** : la déclaration côté Solr, à comparer avec les deux mappings.
+- **Visible** : le champ `vecteur`, son type `knn_vector_384`, la classe `org.apache.solr.schema.DenseVectorField` et les cases *Indexed* et *Stored*. L'écran n'affiche pas les paramètres du type (dimension, similarité, HNSW) : ils sont dans la capture suivante.
+- **Montre** : la déclaration du champ côté Solr.
 
-**Mes notes**
+📸 `03-solr-fieldtype.png`
+- **Où** : le terminal, après `clear`.
+- **Commande** : `curl -s localhost:8983/solr/wikipedia/schema/fieldtypes/knn_vector_384`
+- **Visible** : la commande et la réponse complète : `class`, `vectorDimension` 384, `similarityFunction` cosine, `knnAlgorithm` hnsw, `hnswM` 16, `hnswEfConstruction` 100.
+- **Montre** : les paramètres vectoriels de Solr, à comparer avec les deux mappings.
+
+**Mes notes** : dans `notes/01-recherche-vectorielle.md`, section « Étape 3 : déclarer un champ vectoriel dans chaque moteur ».
 
 ---
 
@@ -271,7 +284,7 @@ Dans Kibana, la vue détaillée par champ : `POST wikipedia/_disk_usage?run_expe
 - **Cadrage** : de la première commande à la dernière ligne de sortie.
 - **Montre** : la place occupée par les mêmes documents dans chaque moteur.
 
-**Mes notes**
+**Mes notes** : dans `notes/01-recherche-vectorielle.md`, section « Étape 4 : indexer les mêmes vecteurs dans les trois moteurs ».
 
 ---
 
@@ -287,7 +300,7 @@ make -s vecteur Q="fromage à pâte molle" > /tmp/v.json
 *Solr* (terminal ; dans l'interface, onglet *Query*, mettre la même chose dans `q`) :
 ```bash
 curl -s localhost:8983/solr/wikipedia/select \
-  --data-urlencode "q={!knn f=vecteur topK=10}$(cat /tmp/v.json)" \
+  --data-urlencode 'q={!knn f=vecteur topK=10}'"$(cat /tmp/v.json)" \
   --data-urlencode "fl=titre,theme,score"
 ```
 
@@ -317,14 +330,36 @@ make comparer Q="peintre de paysages norvégien"
 ```
 
 **À observer**
-- Les mêmes documents remontent dans le même ordre, avec les mêmes scores : avec la similarité cosinus, les trois moteurs renvoient `(1 + cos) / 2`.
+- Les scores sont identiques d'un moteur à l'autre pour un même document : avec la similarité cosinus, les trois renvoient `(1 + cos) / 2`.
 - « les violons fabriqués à Crémone » trouve les articles sur Stradivarius, sans mot commun : c'est l'apport de la recherche sémantique.
-- La recherche est **approchée**. Avec cinq résultats :
-  ```bash
-  make comparer Q="un peintre qui peignait des nénuphars" K=5
-  ```
-  chez moi, Solr donne Jules Adler (0,9176) en cinquième position, alors qu'Elasticsearch et OpenSearch trouvent Oleksa Novakivskyi (0,9180), plus proche. Solr parcourt le graphe HNSW avec `topK` candidats seulement ; avec `efSearchScaleFactor=4` (quatre fois plus de candidats) ou `topK=10`, il le retrouve. Elasticsearch examine `num_candidates` candidats (100 dans `comparer.py`), OpenSearch `ef_search` (100 par défaut avec Faiss). Le résultat dépend de la construction du graphe : il peut différer chez toi.
-- `num_candidates` (Elasticsearch) : essayer 10 puis 500. Sur 909 documents, aucune différence visible ; sur des millions, c'est le réglage principal entre précision et temps de réponse.
+- Les trois moteurs ne remontent **pas toujours les mêmes documents** : la recherche est **approchée**. `make comparer` calcule aussi le vrai top k, par force brute (la requête comparée aux 909 vecteurs), et affiche le **rappel** de chaque moteur : la part de ce vrai top k qu'il a retrouvée ; un ✗ marque un document qui n'en fait pas partie, et les documents manqués sont listés. Chez moi, pour « les violons fabriqués à Crémone » :
+
+  | Moteur | Rappel | Manqués | Cause |
+  |---|---|---|---|
+  | OpenSearch (Faiss, vecteurs `float`) | 10/10 | — | il examine `ef_search` = 100 candidats par défaut |
+  | Solr (vecteurs `float`) | 8/10 | Rabâb égyptien, Vihuela | il parcourt le graphe HNSW avec seulement `topK` = 10 candidats |
+  | Elasticsearch (BBQ) | 8/10 | Cymbale antique, Zurna | les candidats sont classés sur les vecteurs binaires, puis seuls 3 × 10 sont recalculés avec les vecteurs complets (`oversample` 3) |
+
+  Le graphe HNSW étant construit avec une part de hasard, le résultat peut différer chez toi.
+- Corriger chaque moteur, et constater que le bon réglage dépend de la cause (le vecteur de la requête dans `/tmp/v.json`, voir plus haut) :
+  - Solr : ajouter `efSearchScaleFactor=2` (deux fois plus de candidats explorés) : 10/10.
+    ```bash
+    make -s vecteur Q="les violons fabriqués à Crémone" > /tmp/v.json
+    curl -s localhost:8983/solr/wikipedia/select \
+      --data-urlencode 'q={!knn f=vecteur topK=10 efSearchScaleFactor=2}'"$(cat /tmp/v.json)" \
+      --data-urlencode "fl=titre,score"
+    ```
+  - Elasticsearch : passer `num_candidates` de 100 à 500 ne change rien (toujours 8/10), car la perte ne vient pas du parcours du graphe mais de la quantification ; ajouter `"rescore_vector": { "oversample": 10 }` dans le `knn` donne 10/10. Dans Kibana :
+    ```
+    POST wikipedia/_search
+    {
+      "knn": { "field": "vecteur", "query_vector": [ … ], "k": 10, "num_candidates": 100,
+               "rescore_vector": { "oversample": 10 } },
+      "_source": ["titre"]
+    }
+    ```
+  - Une recherche **exacte** reste possible quand le corpus est petit ou très filtré : dans Elasticsearch, une requête `script_score` avec `cosineSimilarity` compare la requête à tous les documents (10/10, mais coût proportionnel au nombre de documents).
+- Ce compromis rappel / temps de réponse se règle par moteur : `efSearchScaleFactor` (Solr), `num_candidates` et `oversample` (Elasticsearch), `ef_search` (OpenSearch). Sur 909 documents, l'écart de temps est invisible ; sur des millions de vecteurs, c'est le réglage principal.
 
 📸 `05-solr-knn.png`
 - **Où** : http://localhost:8983/solr/, collection `wikipedia`, *Query*.
@@ -344,10 +379,15 @@ make comparer Q="peintre de paysages norvégien"
 
 📸 `05-comparer.png`
 - **Où** : le terminal, après `clear`.
-- **Visible** : `make comparer Q="les violons fabriqués à Crémone"` et sa sortie complète : les trois listes (Solr, Elasticsearch, OpenSearch) de dix résultats, avec les articles sur Stradivarius en tête.
-- **Montre** : les trois moteurs donnent le même résultat, et la recherche trouve des documents sans mot commun avec la requête.
+- **Visible** : `make comparer Q="les violons fabriqués à Crémone"` et sa sortie complète : le vrai top 10 (force brute), puis les listes de Solr, Elasticsearch et OpenSearch avec leur rappel, les ✗ et les documents manqués. Si la sortie dépasse la hauteur du terminal, faire deux captures : `05-comparer-1.png` (exact et Solr) et `05-comparer-2.png` (Elasticsearch et OpenSearch).
+- **Montre** : la recherche trouve des documents sans mot commun avec la requête, et elle est approchée : chaque moteur peut manquer des voisins, pour des raisons différentes.
 
-**Mes notes**
+📸 `05-rappel-corrige.png`
+- **Où** : le terminal, après `clear`.
+- **Visible** : la commande `curl` Solr avec `efSearchScaleFactor=2` et sa réponse, où figurent Rabâb égyptien et Vihuela (ou les documents manqués chez toi).
+- **Montre** : un réglage suffit à retrouver les voisins manqués.
+
+**Mes notes** : dans `notes/01-recherche-vectorielle.md`, section « Étape 5 : interroger en kNN ».
 
 ---
 
@@ -373,8 +413,8 @@ POST wikipedia/_search
 Et dans Solr, un `fq` exclu du préfiltre :
 ```bash
 curl -s localhost:8983/solr/wikipedia/select \
-  --data-urlencode "q={!knn f=vecteur topK=10 excludeTags=t}$(cat /tmp/v.json)" \
-  --data-urlencode "fq={!tag=t}theme:vin" --data-urlencode "fl=titre,theme,score"
+  --data-urlencode 'q={!knn f=vecteur topK=10 excludeTags=t}'"$(cat /tmp/v.json)" \
+  --data-urlencode 'fq={!tag=t}theme:vin' --data-urlencode "fl=titre,theme,score"
 ```
 
 **À observer**
@@ -393,7 +433,7 @@ curl -s localhost:8983/solr/wikipedia/select \
 - **Visible** : à gauche, la requête avec `knn` (vecteur replié) et `post_filter` ; à droite, la réponse avec `"total": { "value": 0 }` et `"hits": []`.
 - **Montre** : un post-filtre peut ne laisser aucun résultat.
 
-**Mes notes**
+**Mes notes** : dans `notes/01-recherche-vectorielle.md`, section « Étape 6 : filtrer ».
 
 ---
 
@@ -534,7 +574,7 @@ curl -s localhost:8983/solr/wikipedia/select \
 | Licence | gratuit | Enterprise (ou essai) | gratuit |
 | Statut | expérimental | GA | GA |
 
-**Mes notes**
+**Mes notes** : dans `notes/01-recherche-vectorielle.md`, section « Étape 7 : vectoriser dans le moteur lui-même ».
 
 ---
 
@@ -550,7 +590,7 @@ curl -s localhost:8983/solr/wikipedia/select \
 
 **Pourquoi** : les vecteurs doivent tenir en mémoire (cache du système) pour une recherche rapide. Le détail, et la comparaison avec la quantification de Solr et d'OpenSearch, feront l'objet de l'article sur la quantification.
 
-**Mes notes**
+**Mes notes** : dans `notes/01-recherche-vectorielle.md`, section « Étape 8 : le dimensionnement en un coup d'œil ».
 
 ---
 
@@ -562,7 +602,7 @@ Questions pour l'article :
 - Quels pièges as-tu rencontrés ?
 - Dans quel cas recommanderais-tu chacun des trois ?
 
-**Mes notes**
+**Mes notes** : dans `notes/01-recherche-vectorielle.md`, section « Étape 9 : bilan ».
 
 ---
 

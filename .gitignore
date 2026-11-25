@@ -3,3 +3,4 @@ donnees/crawl-*.jsonl
 captures/
 __pycache__/
 .idea/
+notes/
