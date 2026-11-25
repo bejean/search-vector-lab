@@ -11,7 +11,7 @@ Ce parcours a deux buts :
 
 ### L'article visé
 
-- **Titre** : « Recherche vectorielle avec Solr, Elasticsearch et OpenSearch : le guide pratique ».
+- **Titre** : « Recherche vectorielle avec Solr, Elasticsearch et OpenSearch : les bases ».
 - **Publication** : blog d'[Eolya](https://www.eolya.fr/), daté du 17 mars 2026, aux versions des moteurs sorties à cette date (ci-dessus). C'est le premier article d'une série sur la recherche vectorielle, hybride et le RAG.
 - **Lecteurs** : architectes, développeurs et administrateurs qui exploitent ou choisissent un moteur de recherche.
 - **Promesse** : comprendre ce qu'est la recherche vectorielle et la mettre en œuvre sur Solr, Elasticsearch et OpenSearch, en voyant ce que chacun fait par défaut, ce qui est gratuit, expérimental ou soumis à licence, et les pièges rencontrés.

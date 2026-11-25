@@ -6,7 +6,7 @@ Il accompagne une série d'articles du blog d'[Eolya](https://www.eolya.fr/). Ch
 
 | Parcours | Article | Tag |
 |---|---|---|
-| [01 : la recherche vectorielle](parcours/01-recherche-vectorielle.md) | Recherche vectorielle avec Solr, Elasticsearch et OpenSearch : le guide pratique | `article-01` |
+| [01 : la recherche vectorielle](parcours/01-recherche-vectorielle.md) | Recherche vectorielle avec Solr, Elasticsearch et OpenSearch : les bases | `article-01` |
 
 ## Prérequis
 
