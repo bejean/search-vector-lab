@@ -2,6 +2,40 @@
 
 Versions : Solr 10.0.0, Elasticsearch et Kibana 9.3.1, OpenSearch et OpenSearch Dashboards 3.5.0, Text Embeddings Inference (TEI) 1.9.2 avec le modèle `intfloat/multilingual-e5-small`.
 
+## Objectif final
+
+Ce parcours a deux buts :
+
+1. **S'initier** à la recherche vectorielle en la pratiquant, de la même façon, sur les trois moteurs.
+2. **Produire un article** de blog à partir de ce qu'on a fait, observé et capturé.
+
+### L'article visé
+
+- **Titre** : « Recherche vectorielle avec Solr, Elasticsearch et OpenSearch : le guide pratique ».
+- **Publication** : blog d'[Eolya](https://www.eolya.fr/), daté du 17 mars 2026, aux versions des moteurs sorties à cette date (ci-dessus). C'est le premier article d'une série sur la recherche vectorielle, hybride et le RAG.
+- **Lecteurs** : architectes, développeurs et administrateurs qui exploitent ou choisissent un moteur de recherche.
+- **Promesse** : comprendre ce qu'est la recherche vectorielle et la mettre en œuvre sur Solr, Elasticsearch et OpenSearch, en voyant ce que chacun fait par défaut, ce qui est gratuit, expérimental ou soumis à licence, et les pièges rencontrés.
+- **Plan** : celui des étapes du parcours.
+  1. Le laboratoire.
+  2. Ce qu'est un embedding.
+  3. Déclarer un champ vectoriel (tableau des équivalences).
+  4. Indexer et mesurer.
+  5. Interroger en kNN ; la recherche approchée.
+  6. Préfiltre et post-filtre.
+  7. Vectoriser dans le moteur (tableau comparatif).
+  8. Dimensionnement.
+  9. Avis du praticien et tableau de synthèse.
+- **Hors périmètre**, réservé aux articles suivants de la série : recherche hybride et RRF, quantification détaillée, reranking, découpage des documents en passages, RAG.
+- **Matière de l'article** :
+  - les rubriques **Mes notes** de chaque étape ;
+  - les copies d'écran de `captures/` ;
+  - les requêtes de ce parcours ;
+  - le bilan de l'étape 9.
+
+  Le texte est rédigé ensuite, avec un tableau comparatif et un avis à la première personne. Il renvoie à ce dépôt, au tag `article-01`, pour que le lecteur refasse les manipulations.
+
+## Mode d'emploi
+
 Le parcours se suit dans l'ordre ; compter deux à trois heures. Chaque étape donne :
 - **Objectif** : ce qu'on apprend ;
 - **À faire** : les commandes (terminal de l'hôte, dans ce dossier) ou les requêtes (interfaces web) ;
