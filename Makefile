@@ -16,7 +16,7 @@ VOLUMES_MOTEURS = search-vector-lab_solr-data search-vector-lab_es-data search-v
 .DEFAULT_GOAL := help
 .PHONY: help up down restart ps logs status \
 	outils wikipedia vectoriser indexer indexer-tous importer-crawl \
-	vecteur comparer reset reset-tout
+	similarites vecteur comparer reset reset-tout
 
 help: ## Affiche cette aide
 	@awk 'BEGIN {FS = ":.*?## "; printf "\n$(GREEN)Commandes disponibles:$(NC)\n"} \
@@ -75,14 +75,18 @@ indexer-tous: ## Indexe dans les trois moteurs (défaut : Wikipédia, index wiki
 	$(OUTILS) outils/indexer.py elasticsearch $(FICHIER) $(INDEX)
 	$(OUTILS) outils/indexer.py opensearch $(FICHIER) $(INDEX)
 
-importer-crawl: ## Importe un corpus crawlé, sur l'hôte (ex : make importer-crawl DOSSIER=… THEME=… [MAX=500])
+importer-crawl: ## Importe un corpus crawlé (ex : make importer-crawl DOSSIER=… THEME=… [MAX=500])
 	@if [ -z "$(DOSSIER)" ]; then \
 		echo "$(RED)❌ Usage : make importer-crawl DOSSIER=<dossier du crawl> [THEME=nom] [MAX=N]$(NC)"; \
 		exit 1; \
 	fi
-	python3 outils/importer_crawl.py "$(DOSSIER)" $(if $(THEME),--theme "$(THEME)") $(if $(MAX),--max $(MAX))
+	$(DOCKER_COMPOSE) run --rm -v "$(abspath $(DOSSIER)):/crawl:ro" outils python outils/importer_crawl.py /crawl \
+		--nom "$(notdir $(patsubst %/,%,$(DOSSIER)))" $(if $(THEME),--theme "$(THEME)") $(if $(MAX),--max $(MAX))
 
 ##@ 🔎 Recherche
+similarites: ## Similarité cosinus entre textes via TEI (ex : make similarites T='"query: …" "passage: …"')
+	@$(OUTILS) outils/similarites.py $(T)
+
 vecteur: ## Affiche le vecteur d'une requête (ex : make vecteur Q="fromage à pâte molle" > /tmp/v.json)
 	@if [ -z "$(Q)" ]; then echo "$(RED)❌ Usage : make vecteur Q=\"texte\"$(NC)" >&2; exit 1; fi
 	@$(OUTILS) outils/vecteur_requete.py "$(Q)"

@@ -38,7 +38,7 @@ Ce parcours a deux buts :
 
 Le parcours se suit dans l'ordre ; compter deux à trois heures. Chaque étape donne :
 - **Objectif** : ce qu'on apprend ;
-- **À faire** : les commandes (terminal de l'hôte, dans ce dossier) ou les requêtes (interfaces web) ;
+- **À faire** : les commandes (terminal de l'hôte, dans ce dossier) ou les requêtes (interfaces web). L'hôte n'a besoin que de Docker, `make`, `curl`, d'un éditeur de texte et, si on le souhaite, de Postman : les scripts Python tournent dans le conteneur d'outils, via `make` ;
 - **À observer** : ce qu'il faut regarder, avec une question à garder en tête ;
 - **Pourquoi** : l'explication ;
 - 📸 : la copie d'écran à prendre, à enregistrer dans `captures/` sous le nom indiqué. Fenêtre du navigateur à 1440 × 900, zoom 100 %.
@@ -89,21 +89,20 @@ La console Dev Tools de Kibana et celle de Dashboards gardent leur contenu dans 
 
 **Objectif** : comprendre ce qu'est un embedding et ce que mesure la similarité.
 
-**À faire** : demander à TEI les vecteurs d'une requête et de deux passages.
+**À faire** : regarder d'abord un vecteur brut, tel que TEI le renvoie.
 ```bash
-curl -s localhost:8088/embed -H 'Content-Type: application/json' -d '{
-  "inputs": ["query: fromage à pâte molle",
-             "passage: Le camembert est un fromage à pâte molle et à croûte fleurie.",
-             "passage: Jupiter est la plus grande planète du Système solaire."],
-  "normalize": true}' > /tmp/vecteurs.json
-python3 -c "
-import json; v = json.load(open('/tmp/vecteurs.json'))
-print('dimensions :', len(v[0]))
-cos = lambda a, b: sum(x * y for x, y in zip(a, b))
-print('requête / camembert : %.3f' % cos(v[0], v[1]))
-print('requête / Jupiter   : %.3f' % cos(v[0], v[2]))"
+curl -s localhost:8088/embed -H 'Content-Type: application/json' \
+  -d '{"inputs": "query: fromage à pâte molle", "normalize": true}'
 ```
-Refaire l'essai sans les préfixes `query:` et `passage:`, puis avec une requête sans aucun mot commun avec le passage (« spécialité normande au lait cru »).
+Puis comparer une requête à deux passages (`outils/similarites.py`, lancé dans le conteneur d'outils, demande les vecteurs à TEI et calcule les cosinus) :
+```bash
+make similarites
+```
+Refaire l'essai sans les préfixes `query:` et `passage:`, puis avec une requête sans aucun mot commun avec le passage :
+```bash
+make similarites T='"fromage à pâte molle" "Le camembert est un fromage à pâte molle et à croûte fleurie." "Jupiter est la plus grande planète du Système solaire."'
+make similarites T='"query: spécialité normande au lait cru" "passage: Le camembert est un fromage à pâte molle et à croûte fleurie." "passage: Jupiter est la plus grande planète du Système solaire."'
+```
 
 **À observer**
 - Un vecteur de 384 nombres, quelle que soit la longueur du texte.

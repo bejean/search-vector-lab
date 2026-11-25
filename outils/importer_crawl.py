@@ -7,10 +7,10 @@ Le texte complet est gardé (recherche lexicale), mais le modèle E5 n'en vector
 (environ 2 000 caractères) : découper les longs documents en passages est le sujet d'un parcours ultérieur.
 Ces corpus ne sont pas sous licence libre : le fichier produit reste local (donnees/crawl-*.jsonl, ignoré par Git).
 
-Script en Python standard, à lancer sur l'hôte (le dossier d'entrée est hors du laboratoire, donc hors des conteneurs) :
-    python3 outils/importer_crawl.py <dossier> [--theme nom] [--max N]
+Lancé par le Makefile dans le conteneur d'outils, le dossier du crawl étant monté en lecture seule sur /crawl :
+    make importer-crawl DOSSIER=<dossier> [THEME=nom] [MAX=N]
 Exemple :
-    python3 outils/importer_crawl.py ../ElasticStack_ia/labs/data/output-clean/elastic-search-labs-blog-fr --theme search-labs
+    make importer-crawl DOSSIER=../ElasticStack_ia/labs/data/output-clean/elastic-search-labs-blog-fr THEME=search-labs
 """
 import argparse
 import glob
@@ -30,9 +30,10 @@ def main():
     p.add_argument("dossier", help="dossier de sortie du crawler (fichiers *.json)")
     p.add_argument("--theme", help="valeur du champ theme (par défaut : nom du dossier)")
     p.add_argument("--max", type=int, default=0, help="nombre maximal de documents (0 : tous)")
+    p.add_argument("--nom", help="nom du corpus pour le fichier de sortie (par défaut : nom du dossier)")
     args = p.parse_args()
 
-    nom = os.path.basename(os.path.normpath(args.dossier))
+    nom = args.nom or os.path.basename(os.path.normpath(args.dossier))
     theme = args.theme or nom
     sortie = f"donnees/crawl-{nom}.jsonl"
     vus, n = set(), 0

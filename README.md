@@ -10,7 +10,7 @@ Il accompagne une série d'articles du blog d'[Eolya](https://www.eolya.fr/). Ch
 
 ## Prérequis
 
-- Docker avec Docker Compose.
+- Docker avec Docker Compose, `make` et `curl`. Rien d'autre sur l'hôte : les scripts Python tournent dans un conteneur (`make help`). Un éditeur de texte et, au choix, Postman suffisent pour le reste.
 - Environ 12 Go de mémoire libre.
 - `vm.max_map_count` à 262144 au moins (Elasticsearch et OpenSearch), sur l'hôte Docker.
 
@@ -51,7 +51,7 @@ Si un autre Kibana a déjà servi sur `localhost:5601`, utiliser un profil de na
 
 ## Utiliser un autre corpus
 
-`outils/importer_crawl.py` convertit la sortie d'[Elastic Open Crawler](https://github.com/elastic/crawler) (un dossier de fichiers JSON, une liste de documents par fichier) en `donnees/crawl-<dossier>.jsonl`. Il est écrit en Python standard et se lance sur l'hôte, car le dossier du crawl est en dehors du laboratoire :
+`outils/importer_crawl.py` convertit la sortie d'[Elastic Open Crawler](https://github.com/elastic/crawler) (un dossier de fichiers JSON, une liste de documents par fichier) en `donnees/crawl-<dossier>.jsonl`. Il tourne dans le conteneur d'outils, qui monte le dossier du crawl en lecture seule :
 
 ```bash
 make importer-crawl DOSSIER=<dossier du crawl> THEME=<nom> [MAX=N]
