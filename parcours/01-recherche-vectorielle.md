@@ -489,6 +489,7 @@ GET wikipedia-semantique/_mapping
 - **Où** : la console de Kibana, licence `basic`.
 - **Visible** : à gauche, `PUT wikipedia-semantique/_doc/1` et son document ; à droite, la réponse d'erreur avec `"status": 403` et le message `current license is non-compliant for [inference]`.
 - **Montre** : `semantic_text` demande une licence payante.
+- **Si l'essai est déjà activé** : prendre d'abord `07-es-semantic.png`, puis revenir à la licence gratuite (`POST _license/start_basic?acknowledge=true`) et rejouer `PUT wikipedia-semantique/_doc/1`. L'essai ne s'active qu'une fois par cluster : pour le retrouver, remettre Elasticsearch seul à zéro (`make reset-moteur MOTEUR=elasticsearch`, qui redémarre aussi Kibana), puis reprendre l'étape 7, qui n'utilise que l'index `wikipedia-semantique`. Avant l'étape 8, recréer l'index `wikipedia` (`PUT wikipedia` de l'étape 3) et le remplir (`make indexer MOTEUR=elasticsearch`). Solr, OpenSearch, les variables de la console et les captures déjà prises ne sont pas touchés.
 
 📸 `07-es-semantic.png`
 - **Où** : la console de Kibana, après activation de l'essai.
@@ -620,4 +621,4 @@ Questions pour l'article :
 ```bash
 make reset
 ```
-La cible demande confirmation, arrête la stack et supprime les volumes des trois moteurs. Le volume `search-vector-lab_tei-cache` garde le modèle de TEI, pour ne pas le télécharger de nouveau (`make reset-tout` le supprime aussi).
+La cible demande confirmation, arrête la stack et supprime les volumes des trois moteurs. Le volume `search-vector-lab_tei-cache` garde le modèle de TEI, pour ne pas le télécharger de nouveau (`make reset-tout` le supprime aussi). Pour un seul moteur : `make reset-moteur MOTEUR=<solr|elasticsearch|opensearch>`.

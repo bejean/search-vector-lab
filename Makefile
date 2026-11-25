@@ -12,11 +12,16 @@ OUTILS = $(DOCKER_COMPOSE) run --rm outils python
 # Machine qui publie les ports (depuis un conteneur : HOTE=host.docker.internal)
 HOTE ?= localhost
 VOLUMES_MOTEURS = search-vector-lab_solr-data search-vector-lab_es-data search-vector-lab_os-data
+VOLUME_solr = solr-data
+VOLUME_elasticsearch = es-data
+VOLUME_opensearch = os-data
+INTERFACE_elasticsearch = kibana
+INTERFACE_opensearch = opensearch-dashboards
 
 .DEFAULT_GOAL := help
 .PHONY: help up down restart ps logs status \
 	outils wikipedia vectoriser indexer indexer-tous importer-crawl \
-	similarites vecteur comparer reset reset-tout notes
+	similarites vecteur comparer reset reset-moteur reset-tout notes
 
 help: ## Affiche cette aide
 	@awk 'BEGIN {FS = ":.*?## "; printf "\n$(GREEN)Commandes disponibles:$(NC)\n"} \
@@ -108,6 +113,17 @@ reset: ## Arrête la stack et supprime les données des moteurs (garde le modèl
 	$(DOCKER_COMPOSE) down
 	-docker volume rm $(VOLUMES_MOTEURS)
 	@echo "$(GREEN)✅ Laboratoire remis à zéro (make up pour repartir)$(NC)"
+
+reset-moteur: ## Supprime les données d'un seul moteur et le redémarre (ex : make reset-moteur MOTEUR=elasticsearch)
+	@case "$(MOTEUR)" in solr|elasticsearch|opensearch) ;; \
+		*) echo "$(RED)❌ Usage : make reset-moteur MOTEUR=<solr|elasticsearch|opensearch>$(NC)"; exit 1;; esac
+	@printf "$(RED)⚠️  Supprimer les données de $(MOTEUR) (index, modèles, licence) ? [o/N] $(NC)"; \
+	read r; [ "$$r" = o ] || { echo "Abandon."; exit 1; }
+	$(DOCKER_COMPOSE) rm -sf $(MOTEUR)
+	docker volume rm search-vector-lab_$(VOLUME_$(MOTEUR))
+	$(DOCKER_COMPOSE) up -d $(MOTEUR)
+	$(if $(INTERFACE_$(MOTEUR)),$(DOCKER_COMPOSE) restart $(INTERFACE_$(MOTEUR)))
+	@echo "$(GREEN)✅ $(MOTEUR) remis à zéro ; recréer l'index (étape 3 du parcours), puis make indexer MOTEUR=$(MOTEUR)$(NC)"
 
 reset-tout: ## Comme reset, et supprime aussi le modèle téléchargé par TEI
 	@printf "$(RED)⚠️  Tout supprimer, y compris le cache du modèle de TEI ? [o/N] $(NC)"; \
