@@ -425,14 +425,16 @@ curl -s localhost:8983/solr/wikipedia/select \
 ```
 
 **À observer**
-- Avec le préfiltre : dix résultats, tous du thème « vin », les plus proches de « fromage » parmi eux.
+- Avec le préfiltre : dix résultats, tous du thème « vin », les plus proches de « fromage » parmi eux. Elasticsearch peut encore manquer un document à cause de la quantification BBQ (étape 5).
+- Les scores restent élevés (autour de 0,90) alors que les cépages n'ont rien à voir avec le fromage : avec E5, les scores sont resserrés dans le haut de l’échelle (étape 2), seul l'ordre compte.
 - Avec le post-filtre : on cherche d'abord les dix plus proches dans tout l'index (des fromages), puis on retire ceux qui ne sont pas du thème « vin » : il ne reste aucun résultat, dans Elasticsearch comme dans Solr.
 
 **Pourquoi** : un post-filtre ne fait que retirer des résultats déjà choisis. Le préfiltre restreint le graphe parcouru ; quand le filtre est très sélectif, les moteurs passent à une recherche exacte sur les documents filtrés (Elasticsearch, OpenSearch) ou à une stratégie adaptée (ACORN dans Solr 10, paramètre `filteredSearchThreshold`).
 
 📸 `06-prefiltre.png`
 - **Où** : le terminal, après `clear`.
-- **Visible** : `make comparer Q="fromage à pâte molle" THEME=vin` et sa sortie complète : trois listes de dix cépages.
+- **Visible** : `make comparer Q="fromage à pâte molle" THEME=vin` et sa sortie complète : la liste exacte puis celles de Solr, d'Elasticsearch et d'OpenSearch, dix cépages chacune.
+- **Cadrage** : la sortie fait une soixantaine de lignes ; agrandir le terminal (ou réduire la police) pour que la liste d'OpenSearch soit visible.
 - **Montre** : avec un préfiltre, on obtient toujours dix résultats, tous du thème demandé.
 
 📸 `06-postfiltre-es.png`
