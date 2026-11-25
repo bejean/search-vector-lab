@@ -1,0 +1,457 @@
+# Parcours 1 : la recherche vectorielle avec Solr, Elasticsearch et OpenSearch
+
+Versions : Solr 10.0.0, Elasticsearch et Kibana 9.3.1, OpenSearch et OpenSearch Dashboards 3.5.0, Text Embeddings Inference (TEI) 1.9.2 avec le modèle `intfloat/multilingual-e5-small`.
+
+Le parcours se suit dans l'ordre ; compter deux à trois heures. Chaque étape donne :
+- **Objectif** : ce qu'on apprend ;
+- **À faire** : les commandes (terminal de l'hôte, dans ce dossier) ou les requêtes (interfaces web) ;
+- **À observer** : ce qu'il faut regarder, avec une question à garder en tête ;
+- **Pourquoi** : l'explication ;
+- 📸 : la copie d'écran à prendre, à enregistrer dans `captures/` sous le nom indiqué. Fenêtre du navigateur à 1440 × 900, zoom 100 %.
+
+Note tes observations sous chaque étape, dans la rubrique **Mes notes** : l'article sera écrit à partir d'elles.
+
+| Service | Adresse depuis l'hôte |
+|---|---|
+| Solr (interface d'admin) | http://localhost:8983/solr/ |
+| Elasticsearch (API) | http://localhost:9200 |
+| Kibana (Dev Tools) | http://localhost:5601/app/dev_tools#/console |
+| OpenSearch (API) | http://localhost:9201 |
+| OpenSearch Dashboards (Dev Tools) | http://localhost:5602/app/dev_tools#/console |
+| TEI (embeddings) | http://localhost:8088 |
+
+---
+
+## Étape 1 : démarrer le laboratoire
+
+**Objectif** : avoir les trois moteurs et le serveur d'embeddings en marche.
+
+**À faire**
+```bash
+docker compose up -d
+docker compose ps
+curl -s localhost:9200 | grep number        # Elasticsearch
+curl -s localhost:9201 | grep number        # OpenSearch
+curl -s "localhost:8983/solr/admin/info/system?wt=json" | grep -o '"solr-spec-version":"[^"]*"\|"mode":"[^"]*"'
+curl -s localhost:8088/info                 # TEI : modèle chargé, longueur maximale
+```
+Le premier démarrage télécharge les images et le modèle (quelques minutes). Kibana et Dashboards mettent une à deux minutes de plus à répondre.
+
+**À observer**
+- Solr démarre en mode `solrcloud` sans rien préciser : c'est le mode par défaut depuis Solr 10, avec un ZooKeeper embarqué.
+- `max_input_length` de TEI : 512 tokens. Un texte plus long est tronqué (le reste est ignoré pour le vecteur).
+
+**Pourquoi** : la sécurité est désactivée sur les trois moteurs pour se concentrer sur la recherche ; les ports ne sont ouverts que sur la machine locale.
+
+📸 `01-solr-admin.png` (tableau de bord de Solr), `01-kibana.png` (console Dev Tools vide), `01-dashboards.png` (console Dev Tools vide).
+
+**Mes notes**
+
+---
+
+## Étape 2 : des vecteurs à la main
+
+**Objectif** : comprendre ce qu'est un embedding et ce que mesure la similarité.
+
+**À faire** : demander à TEI les vecteurs d'une requête et de deux passages.
+```bash
+curl -s localhost:8088/embed -H 'Content-Type: application/json' -d '{
+  "inputs": ["query: fromage à pâte molle",
+             "passage: Le camembert est un fromage à pâte molle et à croûte fleurie.",
+             "passage: Jupiter est la plus grande planète du Système solaire."],
+  "normalize": true}' > /tmp/vecteurs.json
+python3 -c "
+import json; v = json.load(open('/tmp/vecteurs.json'))
+print('dimensions :', len(v[0]))
+cos = lambda a, b: sum(x * y for x, y in zip(a, b))
+print('requête / camembert : %.3f' % cos(v[0], v[1]))
+print('requête / Jupiter   : %.3f' % cos(v[0], v[2]))"
+```
+Refaire l'essai sans les préfixes `query:` et `passage:`, puis avec une requête sans aucun mot commun avec le passage (« spécialité normande au lait cru »).
+
+**À observer**
+- Un vecteur de 384 nombres, quelle que soit la longueur du texte.
+- Le passage sur le camembert est plus proche de la requête que celui sur Jupiter… mais Jupiter obtient tout de même environ 0,77 : avec E5, les scores sont resserrés dans le haut de l'échelle. Seul le classement compte, pas la valeur absolue.
+- Sans les préfixes, les écarts changent : E5 a été entraîné avec eux.
+
+**Pourquoi** : le modèle projette un texte dans un espace où des sens proches donnent des vecteurs proches. Les vecteurs sont normalisés (norme 1) : le cosinus se réduit alors à un produit scalaire. La recherche vectorielle consiste à trouver les k vecteurs les plus proches de celui de la requête, sans mot commun nécessaire.
+
+📸 `02-similarites.png` (le terminal avec les deux scores).
+
+**Mes notes**
+
+---
+
+## Étape 3 : déclarer un champ vectoriel dans chaque moteur
+
+**Objectif** : voir comment chaque moteur décrit un champ vectoriel et quels choix il fait par défaut.
+
+**À faire**
+
+*Solr* (terminal) : créer la collection, puis le type et les champs par l'API Schema.
+```bash
+curl -s localhost:8983/api/collections -H 'Content-Type: application/json' \
+  -d '{"name":"wikipedia","config":"_default","numShards":1,"replicationFactor":1}'
+
+curl -s localhost:8983/solr/wikipedia/schema -H 'Content-Type: application/json' -d '{
+  "add-field-type": {"name":"knn_vector_384", "class":"solr.DenseVectorField",
+    "vectorDimension":384, "similarityFunction":"cosine",
+    "knnAlgorithm":"hnsw", "hnswM":16, "hnswEfConstruction":100},
+  "add-field": [
+    {"name":"vecteur", "type":"knn_vector_384", "indexed":true, "stored":true},
+    {"name":"titre", "type":"text_general", "multiValued":false},
+    {"name":"texte", "type":"text_general", "multiValued":false},
+    {"name":"theme", "type":"string"},
+    {"name":"url", "type":"string", "indexed":false}]}'
+```
+Attention : l'adresse est `/solr/wikipedia/schema`. La même requête envoyée à l'API v2 `/api/collections/wikipedia/schema` répond sans erreur mais n'ajoute rien (constaté dans Solr 10.0.0).
+
+*Elasticsearch* (console de Kibana) :
+```
+PUT wikipedia
+{
+  "mappings": {
+    "properties": {
+      "titre":   { "type": "text" },
+      "texte":   { "type": "text" },
+      "theme":   { "type": "keyword" },
+      "url":     { "type": "keyword", "index": false },
+      "vecteur": { "type": "dense_vector", "dims": 384, "similarity": "cosine" }
+    }
+  }
+}
+
+GET wikipedia/_mapping
+```
+
+*OpenSearch* (console de Dashboards) :
+```
+PUT wikipedia
+{
+  "settings": { "index.knn": true },
+  "mappings": {
+    "properties": {
+      "titre":   { "type": "text" },
+      "texte":   { "type": "text" },
+      "theme":   { "type": "keyword" },
+      "url":     { "type": "keyword", "index": false },
+      "vecteur": { "type": "knn_vector", "dimension": 384, "space_type": "cosinesimil",
+                   "method": { "name": "hnsw", "parameters": { "m": 16, "ef_construction": 100 } } }
+    }
+  }
+}
+
+GET wikipedia/_mapping
+```
+
+**À observer**
+- Elasticsearch a complété le mapping : `index_options` de type `bbq_hnsw` avec `rescore_vector.oversample` à 3. Sans qu'on le demande, les vecteurs sont quantifiés en binaire (1 bit par dimension) et les meilleurs candidats sont recalculés avec les vecteurs complets. C'est le choix par défaut à partir de 384 dimensions ; en dessous, `int8_hnsw`.
+- OpenSearch a choisi le moteur `faiss` (bibliothèque native C++), et non Lucene.
+- Solr garde les vecteurs en `float` tant qu'on ne choisit pas un type quantifié (`ScalarQuantizedDenseVectorField`, `BinaryQuantizedDenseVectorField`, nouveaux en Solr 10).
+- Les trois moteurs ont les mêmes réglages HNSW par défaut : 16 voisins par nœud du graphe (`hnswM`, `m`), 100 candidats à la construction (`hnswEfConstruction`, `ef_construction`).
+
+**Pourquoi** : HNSW (Hierarchical Navigable Small World) est un graphe de voisinage parcouru de proche en proche : la recherche est approchée (elle peut manquer un voisin) mais rapide. Les trois moteurs partagent le principe ; ils diffèrent par le stockage des vecteurs et la quantification.
+
+| Notion | Solr | Elasticsearch | OpenSearch |
+|---|---|---|---|
+| Type de champ | `solr.DenseVectorField` | `dense_vector` | `knn_vector` (+ `index.knn: true`) |
+| Dimension | `vectorDimension` | `dims` | `dimension` |
+| Similarité | `similarityFunction` : `cosine`, `dot_product`, `euclidean` | `similarity` : `cosine`, `dot_product`, `l2_norm`, `max_inner_product` | `space_type` : `cosinesimil`, `innerproduct`, `l2`… |
+| HNSW | `hnswM`, `hnswEfConstruction` | `index_options.m`, `ef_construction` | `method.parameters.m`, `ef_construction` |
+| Quantification par défaut | aucune | BBQ dès 384 dimensions | aucune (`compression_level` 1x) |
+| Bibliothèque | Lucene | Lucene | Faiss (ou Lucene) |
+
+📸 `03-es-mapping.png` (réponse de `GET wikipedia/_mapping` dans Kibana, partie `vecteur`), `03-os-mapping.png` (même chose dans Dashboards), `03-solr-schema.png` (Solr, collection `wikipedia`, *Schema*, champ `vecteur`).
+
+**Mes notes**
+
+---
+
+## Étape 4 : indexer les mêmes vecteurs dans les trois moteurs
+
+**Objectif** : indexer des vecteurs calculés hors du moteur, et regarder ce qu'ils coûtent.
+
+**À faire**
+```bash
+docker compose --profile outils build outils
+docker compose run --rm outils python outils/vectoriser.py        # 909 articles, environ une minute sur CPU
+docker compose run --rm outils python outils/indexer.py solr
+docker compose run --rm outils python outils/indexer.py elasticsearch
+docker compose run --rm outils python outils/indexer.py opensearch
+```
+Le jeu de données (`donnees/wikipedia-fr.jsonl`) est fourni ; `outils/telecharger_wikipedia.py` le reconstruit.
+
+Puis comparer la place occupée :
+```bash
+curl -s "localhost:9200/_cat/indices/wikipedia?v&h=index,docs.count,store.size"
+curl -s "localhost:9201/_cat/indices/wikipedia?v&h=index,docs.count,store.size"
+curl -s "localhost:8983/solr/admin/cores?action=STATUS&wt=json" | grep -o '"size":"[^"]*"'
+```
+Dans Kibana, la vue détaillée par champ : `POST wikipedia/_disk_usage?run_expensive_tasks=true`.
+
+**À observer**
+- Combien de temps prend la vectorisation : c'est souvent l'étape la plus lente d'une chaîne d'indexation.
+- La taille des index. Chez moi : Elasticsearch 2,2 Mo, OpenSearch 3,5 Mo, Solr 4 Mo, pour les mêmes 909 documents. Elasticsearch exclut les vecteurs de `_source` depuis la 9.2 ; OpenSearch les garde dans `_source` ; Solr les stocke parce que le champ est déclaré `stored`.
+- La part du champ `vecteur` dans `_disk_usage` (Elasticsearch).
+- Solr 10 n'expose plus ses métriques qu'au format Prometheus ou OpenMetrics (`/solr/admin/metrics`) : pour une taille d'index, l'état des cœurs est plus simple.
+- 384 dimensions × 4 octets = 1,5 Ko par vecteur en `float`, avant toute quantification.
+
+**Pourquoi** : la mémoire et le disque nécessaires aux vecteurs sont le premier poste de coût d'une recherche vectorielle ; on y reviendra dans l'article sur la quantification.
+
+📸 `04-tailles.png` (le terminal avec les trois tailles).
+
+**Mes notes**
+
+---
+
+## Étape 5 : interroger en kNN
+
+**Objectif** : écrire une requête kNN dans chaque moteur et comparer les résultats.
+
+**À faire** : obtenir le vecteur d'une requête, puis le coller dans chaque interface.
+```bash
+docker compose run --rm outils python outils/vecteur_requete.py "fromage à pâte molle" > /tmp/v.json
+```
+
+*Solr* (terminal ; dans l'interface, onglet *Query*, mettre la même chose dans `q`) :
+```bash
+curl -s localhost:8983/solr/wikipedia/select \
+  --data-urlencode "q={!knn f=vecteur topK=10}$(cat /tmp/v.json)" \
+  --data-urlencode "fl=titre,theme,score"
+```
+
+*Elasticsearch* (Kibana) :
+```
+POST wikipedia/_search
+{
+  "knn": { "field": "vecteur", "query_vector": [ …coller le vecteur… ], "k": 10, "num_candidates": 100 },
+  "_source": ["titre", "theme"]
+}
+```
+
+*OpenSearch* (Dashboards) :
+```
+POST wikipedia/_search
+{
+  "query": { "knn": { "vecteur": { "vector": [ …coller le vecteur… ], "k": 10 } } },
+  "_source": ["titre", "theme"]
+}
+```
+
+Les trois à la fois, côte à côte :
+```bash
+docker compose run --rm outils python outils/comparer.py "fromage à pâte molle"
+docker compose run --rm outils python outils/comparer.py "les violons fabriqués à Crémone"
+docker compose run --rm outils python outils/comparer.py "peintre de paysages norvégien"
+```
+
+**À observer**
+- Les mêmes documents remontent dans le même ordre, avec les mêmes scores : avec la similarité cosinus, les trois moteurs renvoient `(1 + cos) / 2`.
+- « les violons fabriqués à Crémone » trouve les articles sur Stradivarius, sans mot commun : c'est l'apport de la recherche sémantique.
+- La recherche est **approchée**. Avec cinq résultats :
+  ```bash
+  docker compose run --rm outils python outils/comparer.py "un peintre qui peignait des nénuphars" 5
+  ```
+  chez moi, Solr donne Jules Adler (0,9176) en cinquième position, alors qu'Elasticsearch et OpenSearch trouvent Oleksa Novakivskyi (0,9180), plus proche. Solr parcourt le graphe HNSW avec `topK` candidats seulement ; avec `efSearchScaleFactor=4` (quatre fois plus de candidats) ou `topK=10`, il le retrouve. Elasticsearch examine `num_candidates` candidats (100 dans `comparer.py`), OpenSearch `ef_search` (100 par défaut avec Faiss). Le résultat dépend de la construction du graphe : il peut différer chez toi.
+- `num_candidates` (Elasticsearch) : essayer 10 puis 500. Sur 909 documents, aucune différence visible ; sur des millions, c'est le réglage principal entre précision et temps de réponse.
+
+📸 `05-solr-knn.png` (onglet *Query* de Solr avec les résultats), `05-es-knn.png` (Kibana), `05-os-knn.png` (Dashboards), `05-comparer.png` (terminal, sortie de `comparer.py`).
+
+**Mes notes**
+
+---
+
+## Étape 6 : filtrer
+
+**Objectif** : comprendre la différence entre préfiltre et post-filtre, la question la plus fréquente en mission.
+
+**À faire**
+```bash
+docker compose run --rm outils python outils/comparer.py "fromage à pâte molle" 10 vin
+```
+Le filtre `theme = vin` est appliqué en préfiltre dans les trois moteurs : `fq` pour Solr, `filter` dans le kNN pour Elasticsearch et OpenSearch.
+
+Puis, dans Kibana, la même recherche avec un **post-filtre** :
+```
+POST wikipedia/_search
+{
+  "knn": { "field": "vecteur", "query_vector": [ … ], "k": 10, "num_candidates": 100 },
+  "post_filter": { "term": { "theme": "vin" } },
+  "_source": ["titre", "theme"]
+}
+```
+Et dans Solr, un `fq` exclu du préfiltre :
+```bash
+curl -s localhost:8983/solr/wikipedia/select \
+  --data-urlencode "q={!knn f=vecteur topK=10 excludeTags=t}$(cat /tmp/v.json)" \
+  --data-urlencode "fq={!tag=t}theme:vin" --data-urlencode "fl=titre,theme,score"
+```
+
+**À observer**
+- Avec le préfiltre : dix résultats, tous du thème « vin », les plus proches de « fromage » parmi eux.
+- Avec le post-filtre : on cherche d'abord les dix plus proches dans tout l'index (des fromages), puis on retire ceux qui ne sont pas du thème « vin » : il ne reste aucun résultat, dans Elasticsearch comme dans Solr.
+
+**Pourquoi** : un post-filtre ne fait que retirer des résultats déjà choisis. Le préfiltre restreint le graphe parcouru ; quand le filtre est très sélectif, les moteurs passent à une recherche exacte sur les documents filtrés (Elasticsearch, OpenSearch) ou à une stratégie adaptée (ACORN dans Solr 10, paramètre `filteredSearchThreshold`).
+
+📸 `06-prefiltre.png` (terminal), `06-postfiltre-es.png` (Kibana).
+
+**Mes notes**
+
+---
+
+## Étape 7 : vectoriser dans le moteur lui-même
+
+**Objectif** : laisser le moteur calculer les vecteurs, et voir ce que chacun permet, gratuitement ou non.
+
+### Elasticsearch : `semantic_text`
+
+```
+GET _license
+GET _inference/_all
+
+PUT wikipedia-semantique
+{
+  "mappings": { "properties": {
+    "titre": { "type": "text" },
+    "contenu": { "type": "semantic_text", "inference_id": ".multilingual-e5-small-elasticsearch" } } }
+}
+
+PUT wikipedia-semantique/_doc/1
+{ "titre": "Camembert", "contenu": "Le camembert est un fromage à pâte molle et à croûte fleurie." }
+```
+**À observer** : la licence est `basic` ; l'index se crée, mais l'indexation est refusée (`current license is non-compliant for [inference]`, code 403). Toute l'API Inference, y compris les modèles intégrés au cluster (E5, ELSER), demande une licence Enterprise.
+
+Activer l'essai de 30 jours, puis recommencer :
+```
+POST _license/start_trial?acknowledge=true
+
+PUT wikipedia-semantique/_doc/1
+{ "titre": "Camembert", "contenu": "Le camembert est un fromage à pâte molle et à croûte fleurie." }
+
+PUT wikipedia-semantique/_doc/2
+{ "titre": "Jupiter", "contenu": "Jupiter est la plus grande planète du Système solaire." }
+
+GET wikipedia-semantique/_search
+{ "query": { "match": { "contenu": "spécialité normande au lait cru" } } }
+
+GET wikipedia-semantique/_mapping
+```
+**À observer** : le premier document met une vingtaine de secondes (téléchargement et déploiement du modèle dans le cluster). Une simple requête `match` devient sémantique. Le mapping montre les réglages déduits du modèle (384 dimensions, cosinus).
+
+📸 `07-es-licence-refus.png` (l'erreur 403), `07-es-semantic.png` (la recherche `match` et ses résultats).
+
+### OpenSearch : modèle préentraîné et champ `semantic`
+
+```
+PUT _cluster/settings
+{ "persistent": { "plugins.ml_commons.only_run_on_ml_node": "false",
+                  "plugins.ml_commons.native_memory_threshold": "99" } }
+
+POST _plugins/_ml/models/_register
+{ "name": "huggingface/sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2",
+  "version": "1.0.2", "model_format": "TORCH_SCRIPT" }
+
+GET _plugins/_ml/tasks/<task_id>
+POST _plugins/_ml/models/<model_id>/_deploy
+GET _plugins/_ml/tasks/<task_id du déploiement>
+
+PUT wikipedia-semantique
+{ "settings": { "index.knn": true },
+  "mappings": { "properties": {
+    "titre": { "type": "text" },
+    "contenu": { "type": "semantic", "model_id": "<model_id>" } } } }
+
+PUT wikipedia-semantique/_doc/1
+{ "titre": "Camembert", "contenu": "Le camembert est un fromage à pâte molle et à croûte fleurie." }
+
+PUT wikipedia-semantique/_doc/2
+{ "titre": "Jupiter", "contenu": "Jupiter est la plus grande planète du Système solaire." }
+
+GET wikipedia-semantique/_search
+{ "_source": { "excludes": ["contenu_semantic_info"] },
+  "query": { "neural": { "contenu": { "query_text": "spécialité normande au lait cru" } } } }
+
+GET wikipedia-semantique/_mapping
+```
+**À observer** : tout est gratuit. Le modèle est enregistré puis déployé dans le cluster, deux étapes asynchrones suivies par des tâches. Le champ `semantic` crée lui-même un `knn_vector` (`contenu_semantic_info.embedding`). Le modèle multilingue préentraîné n'est pas E5 : la liste d'OpenSearch propose `paraphrase-multilingual-MiniLM-L12-v2`.
+
+Deux pièges rencontrés en montant ce laboratoire :
+- avec 1 Go de tas, le déploiement échoue (« Memory Circuit Breaker is open ») : le laboratoire donne 2 Go à OpenSearch ;
+- sans la variable `LD_PRELOAD` du `docker-compose.yml`, le nœud s'arrête à la première écriture dans un champ vectoriel une fois le modèle chargé : ml-commons charge le `libstdc++` ancien de PyTorch, puis la bibliothèque Faiss du plugin k-NN n'y trouve pas `GLIBCXX_3.4.20`.
+
+📸 `07-os-modele.png` (tâche de déploiement terminée), `07-os-semantic.png` (la recherche `neural` et ses résultats).
+
+### Solr : le module `language-models`
+
+Le module est activé par `SOLR_MODULES=language-models` dans le `docker-compose.yml`. Il appelle un service d'embeddings par HTTP (via LangChain4j) ; ici, TEI, par son API compatible OpenAI.
+
+```bash
+# 1. Déclarer le parseur de requête : c'est lui qui crée le magasin de modèles
+curl -s localhost:8983/solr/wikipedia/config -H 'Content-Type: application/json' -d '{
+  "add-queryparser": {"name":"knn_text_to_vector",
+    "class":"org.apache.solr.languagemodels.textvectorisation.search.TextToVectorQParserPlugin"}}'
+
+# 2. Enregistrer le modèle (TEI vu comme un service OpenAI)
+curl -s -X PUT localhost:8983/solr/wikipedia/schema/text-to-vector-model-store -H 'Content-Type: application/json' -d '{
+  "class":"dev.langchain4j.model.openai.OpenAiEmbeddingModel", "name":"e5-tei",
+  "params":{"baseUrl":"http://tei:80/v1", "apiKey":"inutile", "modelName":"multilingual-e5-small",
+            "timeout":60, "maxRetries":2}}'
+
+# 3. Rechercher avec du texte
+curl -s localhost:8983/solr/wikipedia/select \
+  --data-urlencode 'q={!knn_text_to_vector model=e5-tei f=vecteur topK=10}query: spécialité normande au lait cru' \
+  --data-urlencode 'fl=titre,theme,score'
+```
+**À observer**
+- L'ordre compte : si le modèle est envoyé avant la déclaration du parseur, Solr répond par une erreur 500 (`ClassCastException`), car le magasin de modèles n'existe pas encore.
+- Le préfixe E5 `query:` se met dans le texte de la requête : Solr transmet le texte tel quel.
+- Solr ne fait pas tourner de modèle lui-même : il appelle un service. Le guide de Solr qualifie le module d'expérimental.
+
+📸 `07-solr-texte.png` (requête `knn_text_to_vector` dans l'onglet *Query*).
+
+| | Solr 10.0 | Elasticsearch 9.3 | OpenSearch 3.5 |
+|---|---|---|---|
+| Où tourne le modèle | service externe (OpenAI, Hugging Face, Mistral, Cohere, ou compatible) | dans le cluster (E5, ELSER) ou service externe | dans le cluster (modèles préentraînés) ou connecteur externe |
+| Champ « tout-en-un » | non (processeur d'indexation + parseur) | `semantic_text` | `semantic` |
+| Licence | gratuit | Enterprise (ou essai) | gratuit |
+| Statut | expérimental | GA | GA |
+
+**Mes notes**
+
+---
+
+## Étape 8 : le dimensionnement en un coup d'œil
+
+**Objectif** : estimer la mémoire nécessaire aux vecteurs.
+
+**À faire**
+- Calcul : nombre de vecteurs × dimensions × octets par dimension. En `float` : 1 million × 384 × 4 = 1,5 Go, plus le graphe HNSW (environ 4 × m octets par vecteur selon la documentation d'Elasticsearch, soit 64 Mo pour m = 16).
+- Dans Kibana : `POST wikipedia/_disk_usage?run_expensive_tasks=true`, partie `vecteur`.
+
+**À observer** : avec BBQ, Elasticsearch garde en mémoire environ 32 fois moins de données pour la recherche dans le graphe, et relit les vecteurs complets pour recalculer le score des meilleurs candidats (`oversample` 3).
+
+**Pourquoi** : les vecteurs doivent tenir en mémoire (cache du système) pour une recherche rapide. Le détail, et la comparaison avec la quantification de Solr et d'OpenSearch, feront l'objet de l'article sur la quantification.
+
+**Mes notes**
+
+---
+
+## Étape 9 : bilan
+
+Questions pour l'article :
+- Quel moteur a été le plus simple à mettre en œuvre, et pourquoi ?
+- Qu'est-ce qui est gratuit, expérimental, ou soumis à licence ?
+- Quels pièges as-tu rencontrés ?
+- Dans quel cas recommanderais-tu chacun des trois ?
+
+**Mes notes**
+
+---
+
+## Remettre le laboratoire à zéro
+
+```bash
+docker compose down
+docker volume rm search-vector-lab_solr-data search-vector-lab_es-data search-vector-lab_os-data
+```
+Le volume `search-vector-lab_tei-cache` garde le modèle de TEI, pour ne pas le télécharger de nouveau.

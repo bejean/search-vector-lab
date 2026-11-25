@@ -1,0 +1,95 @@
+# Laboratoire de recherche vectorielle : Solr, Elasticsearch et OpenSearch côte à côte,
+# avec un serveur d'embeddings local (Text Embeddings Inference).
+# Versions de l'article 1 (2026-03-17) ; sécurité désactivée : usage local uniquement.
+name: search-vector-lab
+
+services:
+  solr:
+    image: solr:10.0.0
+    environment:
+      SOLR_HEAP: 1g
+      SOLR_MODULES: language-models
+    ports:
+      - "127.0.0.1:8983:8983"
+      - "172.17.0.1:8983:8983"
+    volumes:
+      - solr-data:/var/solr
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:9.3.1
+    environment:
+      discovery.type: single-node
+      xpack.security.enabled: "false"
+      ES_JAVA_OPTS: -Xms1g -Xmx1g
+    mem_limit: 4g
+    ports:
+      - "127.0.0.1:9200:9200"
+      - "172.17.0.1:9200:9200"
+    volumes:
+      - es-data:/usr/share/elasticsearch/data
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+  kibana:
+    image: docker.elastic.co/kibana/kibana:9.3.1
+    environment:
+      ELASTICSEARCH_HOSTS: http://elasticsearch:9200
+    ports:
+      - "127.0.0.1:5601:5601"
+      - "172.17.0.1:5601:5601"
+    depends_on: [elasticsearch]
+
+  opensearch:
+    image: opensearchproject/opensearch:3.5.0
+    environment:
+      discovery.type: single-node
+      DISABLE_SECURITY_PLUGIN: "true"
+      DISABLE_INSTALL_DEMO_CONFIG: "true"
+      OPENSEARCH_JAVA_OPTS: -Xms2g -Xmx2g
+      # Contournement : sans ce préchargement, le libstdc++ ancien de PyTorch (ml-commons) est chargé en premier
+      # et la bibliothèque Faiss du plugin k-NN échoue (GLIBCXX_3.4.20 introuvable), ce qui arrête le nœud.
+      LD_PRELOAD: /usr/lib64/libstdc++.so.6
+    mem_limit: 4g
+    ports:
+      - "127.0.0.1:9201:9200"
+      - "172.17.0.1:9201:9200"
+    volumes:
+      - os-data:/usr/share/opensearch/data
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+  opensearch-dashboards:
+    image: opensearchproject/opensearch-dashboards:3.5.0
+    environment:
+      OPENSEARCH_HOSTS: '["http://opensearch:9200"]'
+      DISABLE_SECURITY_DASHBOARDS_PLUGIN: "true"
+    ports:
+      - "127.0.0.1:5602:5601"
+      - "172.17.0.1:5602:5601"
+    depends_on: [opensearch]
+
+  tei:
+    image: ghcr.io/huggingface/text-embeddings-inference:cpu-1.9.2
+    command: --model-id intfloat/multilingual-e5-small
+    ports:
+      - "127.0.0.1:8088:80"
+      - "172.17.0.1:8088:80"
+    volumes:
+      - tei-cache:/data
+
+  # Outils Python (jeu de données, vectorisation, indexation) :
+  # docker compose run --rm outils python outils/<script>.py
+  outils:
+    build: outils
+    profiles: [outils]
+    working_dir: /lab
+    volumes:
+      - ./:/lab
+
+volumes:
+  solr-data:
+  es-data:
+  os-data:
+  tei-cache:
