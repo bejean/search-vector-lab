@@ -17,7 +17,9 @@ Il accompagne une série d'articles du blog d'[Eolya](https://www.eolya.fr/). Ch
 ## Démarrage
 
 ```bash
-docker compose up -d
+make up        # démarre la stack
+make status    # vérifie que chaque service répond
+make help      # toutes les commandes : stack, indexation, recherche, remise à zéro
 ```
 
 | Service | Adresse |
@@ -33,6 +35,7 @@ La sécurité des moteurs est désactivée : ce laboratoire est réservé à un 
 
 ## Contenu
 
+- `Makefile` : commandes du laboratoire (`make help`).
 - `docker-compose.yml` : les services, aux versions du dernier parcours.
 - `outils/` : scripts Python, lancés dans un conteneur (`docker compose run --rm outils python outils/<script>.py`).
   - `telecharger_wikipedia.py` : construit le jeu de données ;
@@ -49,9 +52,9 @@ La sécurité des moteurs est désactivée : ce laboratoire est réservé à un 
 `outils/importer_crawl.py` convertit la sortie d'[Elastic Open Crawler](https://github.com/elastic/crawler) (un dossier de fichiers JSON, une liste de documents par fichier) en `donnees/crawl-<dossier>.jsonl`. Il est écrit en Python standard et se lance sur l'hôte, car le dossier du crawl est en dehors du laboratoire :
 
 ```bash
-python3 outils/importer_crawl.py <dossier du crawl> --theme <nom> [--max N]
-docker compose run --rm outils python outils/vectoriser.py donnees/crawl-<dossier>.jsonl
-docker compose run --rm outils python outils/indexer.py elasticsearch donnees/crawl-<dossier>-vecteurs.jsonl <index>
+make importer-crawl DOSSIER=<dossier du crawl> THEME=<nom> [MAX=N]
+make vectoriser FICHIER=donnees/crawl-<dossier>.jsonl
+make indexer MOTEUR=elasticsearch FICHIER=donnees/crawl-<dossier>-vecteurs.jsonl INDEX=<index>
 ```
 
 L'index doit exister, avec les mêmes champs que `wikipedia` (étape 3 du parcours 1) et un champ `date` de type date. Les fichiers `donnees/crawl-*.jsonl` ne sont pas versionnés : un site crawlé n'est généralement pas sous licence libre. Seuls les 512 premiers tokens de chaque document sont vectorisés (limite d'E5) ; découper les documents longs en passages fera l'objet d'un parcours ultérieur.

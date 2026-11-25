@@ -28,8 +28,8 @@ Note tes observations sous chaque étape, dans la rubrique **Mes notes** : l'art
 
 **À faire**
 ```bash
-docker compose up -d
-docker compose ps
+make up        # les commandes du laboratoire : make help
+make status    # chaque service doit répondre 200
 curl -s localhost:9200 | grep number        # Elasticsearch
 curl -s localhost:9201 | grep number        # OpenSearch
 curl -s "localhost:8983/solr/admin/info/system?wt=json" | grep -o '"solr-spec-version":"[^"]*"\|"mode":"[^"]*"'
@@ -173,13 +173,11 @@ GET wikipedia/_mapping
 
 **À faire**
 ```bash
-docker compose --profile outils build outils
-docker compose run --rm outils python outils/vectoriser.py        # 909 articles, environ une minute sur CPU
-docker compose run --rm outils python outils/indexer.py solr
-docker compose run --rm outils python outils/indexer.py elasticsearch
-docker compose run --rm outils python outils/indexer.py opensearch
+make outils         # image des outils Python
+make vectoriser     # 909 articles, environ une minute sur CPU
+make indexer-tous   # ou un moteur à la fois : make indexer MOTEUR=solr
 ```
-Le jeu de données (`donnees/wikipedia-fr.jsonl`) est fourni ; `outils/telecharger_wikipedia.py` le reconstruit.
+Le jeu de données (`donnees/wikipedia-fr.jsonl`) est fourni ; `make wikipedia` le reconstruit.
 
 Puis comparer la place occupée :
 ```bash
@@ -210,7 +208,7 @@ Dans Kibana, la vue détaillée par champ : `POST wikipedia/_disk_usage?run_expe
 
 **À faire** : obtenir le vecteur d'une requête, puis le coller dans chaque interface.
 ```bash
-docker compose run --rm outils python outils/vecteur_requete.py "fromage à pâte molle" > /tmp/v.json
+make -s vecteur Q="fromage à pâte molle" > /tmp/v.json
 ```
 
 *Solr* (terminal ; dans l'interface, onglet *Query*, mettre la même chose dans `q`) :
@@ -240,9 +238,9 @@ POST wikipedia/_search
 
 Les trois à la fois, côte à côte :
 ```bash
-docker compose run --rm outils python outils/comparer.py "fromage à pâte molle"
-docker compose run --rm outils python outils/comparer.py "les violons fabriqués à Crémone"
-docker compose run --rm outils python outils/comparer.py "peintre de paysages norvégien"
+make comparer Q="fromage à pâte molle"
+make comparer Q="les violons fabriqués à Crémone"
+make comparer Q="peintre de paysages norvégien"
 ```
 
 **À observer**
@@ -250,7 +248,7 @@ docker compose run --rm outils python outils/comparer.py "peintre de paysages no
 - « les violons fabriqués à Crémone » trouve les articles sur Stradivarius, sans mot commun : c'est l'apport de la recherche sémantique.
 - La recherche est **approchée**. Avec cinq résultats :
   ```bash
-  docker compose run --rm outils python outils/comparer.py "un peintre qui peignait des nénuphars" 5
+  make comparer Q="un peintre qui peignait des nénuphars" K=5
   ```
   chez moi, Solr donne Jules Adler (0,9176) en cinquième position, alors qu'Elasticsearch et OpenSearch trouvent Oleksa Novakivskyi (0,9180), plus proche. Solr parcourt le graphe HNSW avec `topK` candidats seulement ; avec `efSearchScaleFactor=4` (quatre fois plus de candidats) ou `topK=10`, il le retrouve. Elasticsearch examine `num_candidates` candidats (100 dans `comparer.py`), OpenSearch `ef_search` (100 par défaut avec Faiss). Le résultat dépend de la construction du graphe : il peut différer chez toi.
 - `num_candidates` (Elasticsearch) : essayer 10 puis 500. Sur 909 documents, aucune différence visible ; sur des millions, c'est le réglage principal entre précision et temps de réponse.
@@ -267,7 +265,7 @@ docker compose run --rm outils python outils/comparer.py "peintre de paysages no
 
 **À faire**
 ```bash
-docker compose run --rm outils python outils/comparer.py "fromage à pâte molle" 10 vin
+make comparer Q="fromage à pâte molle" THEME=vin
 ```
 Le filtre `theme = vin` est appliqué en préfiltre dans les trois moteurs : `fq` pour Solr, `filter` dans le kNN pour Elasticsearch et OpenSearch.
 
@@ -451,7 +449,6 @@ Questions pour l'article :
 ## Remettre le laboratoire à zéro
 
 ```bash
-docker compose down
-docker volume rm search-vector-lab_solr-data search-vector-lab_es-data search-vector-lab_os-data
+make reset
 ```
-Le volume `search-vector-lab_tei-cache` garde le modèle de TEI, pour ne pas le télécharger de nouveau.
+La cible demande confirmation, arrête la stack et supprime les volumes des trois moteurs. Le volume `search-vector-lab_tei-cache` garde le modèle de TEI, pour ne pas le télécharger de nouveau (`make reset-tout` le supprime aussi).
