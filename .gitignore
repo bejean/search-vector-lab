@@ -2,3 +2,4 @@ donnees/*-vecteurs.jsonl
 donnees/crawl-*.jsonl
 captures/
 __pycache__/
+.idea/
