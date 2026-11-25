@@ -41,7 +41,10 @@ Le parcours se suit dans l'ordre ; compter deux à trois heures. Chaque étape d
 - **À faire** : les commandes (terminal de l'hôte, dans ce dossier) ou les requêtes (interfaces web). L'hôte n'a besoin que de Docker, `make`, `curl`, d'un éditeur de texte et, si on le souhaite, de Postman : les scripts Python tournent dans le conteneur d'outils, via `make` ;
 - **À observer** : ce qu'il faut regarder, avec une question à garder en tête ;
 - **Pourquoi** : l'explication ;
-- 📸 : la copie d'écran à prendre, à enregistrer dans `captures/` sous le nom indiqué. Fenêtre du navigateur à 1440 × 900, zoom 100 %.
+- 📸 : la copie d'écran à prendre, à enregistrer dans `captures/` sous le nom indiqué. Chaque consigne dit **où** la prendre, **ce qui doit être visible**, le **cadrage**, et **ce qu'elle montre** dans l'article. Règles communes :
+  - navigateur : fenêtre de 1440 × 900, zoom 100 %, barre d'adresse visible (elle montre l'URL), un seul onglet ; capturer la fenêtre entière ;
+  - console Dev Tools : la requête à gauche, la réponse à droite, sans autre requête dans le panneau de gauche (effacer les précédentes) ; un tableau de 384 nombres se replie avec la flèche de la marge, à gauche du numéro de ligne, pour que la requête tienne à l'écran ;
+  - terminal : au moins 120 colonnes, police lisible, `clear` avant les commandes ; la commande tapée doit apparaître au-dessus de sa sortie ; cadrer de la première commande à la dernière ligne de sortie.
 
 Note tes observations sous chaque étape, dans la rubrique **Mes notes** : l'article sera écrit à partir d'elles.
 
@@ -77,9 +80,22 @@ Le premier démarrage télécharge les images et le modèle (quelques minutes). 
 
 **Pourquoi** : la sécurité est désactivée sur les trois moteurs pour se concentrer sur la recherche ; les ports ne sont ouverts que sur la machine locale.
 
-La console Dev Tools de Kibana et celle de Dashboards gardent leur contenu dans le stockage du navigateur, propre à chaque adresse : si un autre Kibana a déjà servi sur `localhost:5601`, la console affiche ses requêtes, et les effacer les perdrait. Utiliser alors un profil de navigateur dédié au laboratoire. À la première ouverture, la console contient un exemple de requête à effacer avant la capture.
+La console Dev Tools de Kibana et celle de Dashboards gardent leur contenu dans le stockage du navigateur, propre à chaque adresse : si un autre Kibana a déjà servi sur `localhost:5601`, la console affiche ses requêtes, et les effacer les perdrait. Utiliser alors un profil de navigateur dédié au laboratoire. À la première ouverture, la console contient un exemple de requête : le garder pour les captures de cette étape, puis l'effacer.
 
-📸 `01-solr-admin.png` (tableau de bord de Solr), `01-kibana.png` (console Dev Tools, exemple effacé), `01-dashboards.png` (console Dev Tools, exemple effacé).
+📸 `01-solr-admin.png`
+- **Où** : http://localhost:8983/solr/#/ (*Dashboard*).
+- **Visible** : les blocs *Instance*, *Versions* (`solr-spec` 10.0.0, `lucene-spec` 10.3.2) et le début du bloc *JVM* (version de Java).
+- **Montre** : les versions du laboratoire.
+
+📸 `01-kibana.png`
+- **Où** : la console Dev Tools de Kibana, à sa première ouverture.
+- **Visible** : l'exemple d'accueil de la console, tel quel.
+- **Montre** : l'outil avec lequel on interroge Elasticsearch dans la suite.
+
+📸 `01-dashboards.png`
+- **Où** : la console Dev Tools de Dashboards, à sa première ouverture.
+- **Visible** : l'exemple `GET _search`, tel quel.
+- **Montre** : l'outil équivalent pour OpenSearch.
 
 **Mes notes**
 
@@ -111,7 +127,11 @@ make similarites T='"query: spécialité normande au lait cru" "passage: Le came
 
 **Pourquoi** : le modèle projette un texte dans un espace où des sens proches donnent des vecteurs proches. Les vecteurs sont normalisés (norme 1) : le cosinus se réduit alors à un produit scalaire. La recherche vectorielle consiste à trouver les k vecteurs les plus proches de celui de la requête, sans mot commun nécessaire.
 
-📸 `02-similarites.png` (le terminal avec les deux scores).
+📸 `02-similarites.png`
+- **Où** : le terminal, après `clear`.
+- **Visible** : les trois commandes `make similarites` de cette étape (avec préfixes, sans préfixes, sans mot commun) et leurs sorties, soit trois fois deux scores. Les lignes « Container … Creating/Created » peuvent rester.
+- **Cadrage** : de la première commande à la dernière ligne de sortie ; aucune ligne coupée.
+- **Montre** : le camembert est toujours plus proche que Jupiter, les scores E5 sont resserrés vers le haut, et les préfixes modifient les écarts.
 
 **Mes notes**
 
@@ -196,7 +216,21 @@ GET wikipedia/_mapping
 | Quantification par défaut | aucune | BBQ dès 384 dimensions | aucune (`compression_level` 1x) |
 | Bibliothèque | Lucene | Lucene | Faiss (ou Lucene) |
 
-📸 `03-es-mapping.png` (réponse de `GET wikipedia/_mapping` dans Kibana, partie `vecteur`), `03-os-mapping.png` (même chose dans Dashboards), `03-solr-schema.png` (Solr, collection `wikipedia`, *Schema*, champ `vecteur`).
+📸 `03-es-mapping.png`
+- **Où** : la console de Kibana.
+- **Visible** : à gauche, la seule requête `GET wikipedia/_mapping` ; à droite, sa réponse, avec en entier le bloc du champ `vecteur` : `"type": "dense_vector"`, `"dims": 384`, `index_options` avec `"type": "bbq_hnsw"`, `m`, `ef_construction` et `rescore_vector.oversample: 3`.
+- **Cadrage** : faire défiler la réponse si besoin pour que tout le bloc `vecteur` soit à l'écran.
+- **Montre** : Elasticsearch a choisi seul la quantification BBQ.
+
+📸 `03-os-mapping.png`
+- **Où** : la console de Dashboards.
+- **Visible** : à gauche, `GET wikipedia/_mapping` ; à droite, le bloc du champ `vecteur` en entier : `"type": "knn_vector"`, `"dimension": 384`, `method` avec `"engine": "faiss"`, `"space_type": "cosinesimil"`, `"name": "hnsw"` et ses paramètres.
+- **Montre** : OpenSearch utilise Faiss par défaut.
+
+📸 `03-solr-schema.png`
+- **Où** : http://localhost:8983/solr/, menu de gauche : sélectionner la collection `wikipedia`, puis *Schema* ; dans la liste déroulante, choisir le champ `vecteur`.
+- **Visible** : les propriétés du champ et de son type `knn_vector_384` (classe `solr.DenseVectorField`, `vectorDimension` 384, `similarityFunction` cosine, `hnswM`, `hnswEfConstruction`).
+- **Montre** : la déclaration côté Solr, à comparer avec les deux mappings.
 
 **Mes notes**
 
@@ -231,7 +265,11 @@ Dans Kibana, la vue détaillée par champ : `POST wikipedia/_disk_usage?run_expe
 
 **Pourquoi** : la mémoire et le disque nécessaires aux vecteurs sont le premier poste de coût d'une recherche vectorielle ; on y reviendra dans l'article sur la quantification.
 
-📸 `04-tailles.png` (le terminal avec les trois tailles).
+📸 `04-tailles.png`
+- **Où** : le terminal, après `clear`.
+- **Visible** : les trois commandes `curl` de mesure de cette étape et leurs sorties : `docs.count` 909 et `store.size` pour Elasticsearch puis OpenSearch, la taille de l'index pour Solr.
+- **Cadrage** : de la première commande à la dernière ligne de sortie.
+- **Montre** : la place occupée par les mêmes documents dans chaque moteur.
 
 **Mes notes**
 
@@ -288,7 +326,26 @@ make comparer Q="peintre de paysages norvégien"
   chez moi, Solr donne Jules Adler (0,9176) en cinquième position, alors qu'Elasticsearch et OpenSearch trouvent Oleksa Novakivskyi (0,9180), plus proche. Solr parcourt le graphe HNSW avec `topK` candidats seulement ; avec `efSearchScaleFactor=4` (quatre fois plus de candidats) ou `topK=10`, il le retrouve. Elasticsearch examine `num_candidates` candidats (100 dans `comparer.py`), OpenSearch `ef_search` (100 par défaut avec Faiss). Le résultat dépend de la construction du graphe : il peut différer chez toi.
 - `num_candidates` (Elasticsearch) : essayer 10 puis 500. Sur 909 documents, aucune différence visible ; sur des millions, c'est le réglage principal entre précision et temps de réponse.
 
-📸 `05-solr-knn.png` (onglet *Query* de Solr avec les résultats), `05-es-knn.png` (Kibana), `05-os-knn.png` (Dashboards), `05-comparer.png` (terminal, sortie de `comparer.py`).
+📸 `05-solr-knn.png`
+- **Où** : http://localhost:8983/solr/, collection `wikipedia`, *Query*.
+- **Requête** : dans `q`, `{!knn f=vecteur topK=10}` suivi du vecteur de « fromage à pâte molle » (ouvrir `/tmp/v.json` dans l'éditeur de texte et copier son contenu) ; dans `fl`, `titre,theme,score` ; puis *Execute Query*.
+- **Visible** : le formulaire (le champ `q` montre le début du vecteur, c'est normal) et, à droite, le début de la réponse avec les premiers documents (Époisses, Munster, Coulommiers…) et leurs scores.
+- **Montre** : une requête kNN dans l'interface de Solr.
+
+📸 `05-es-knn.png`
+- **Où** : la console de Kibana.
+- **Visible** : à gauche, la requête `POST wikipedia/_search` avec `knn` (tableau `query_vector` replié), `k`, `num_candidates` ; à droite, le début de `hits.hits` avec les titres et les `_score` des premiers résultats.
+- **Montre** : la même requête dans Elasticsearch.
+
+📸 `05-os-knn.png`
+- **Où** : la console de Dashboards.
+- **Visible** : comme pour Kibana : la requête `knn` (vecteur replié) à gauche, les premiers résultats et leurs scores à droite.
+- **Montre** : la même requête dans OpenSearch.
+
+📸 `05-comparer.png`
+- **Où** : le terminal, après `clear`.
+- **Visible** : `make comparer Q="les violons fabriqués à Crémone"` et sa sortie complète : les trois listes (Solr, Elasticsearch, OpenSearch) de dix résultats, avec les articles sur Stradivarius en tête.
+- **Montre** : les trois moteurs donnent le même résultat, et la recherche trouve des documents sans mot commun avec la requête.
 
 **Mes notes**
 
@@ -326,7 +383,15 @@ curl -s localhost:8983/solr/wikipedia/select \
 
 **Pourquoi** : un post-filtre ne fait que retirer des résultats déjà choisis. Le préfiltre restreint le graphe parcouru ; quand le filtre est très sélectif, les moteurs passent à une recherche exacte sur les documents filtrés (Elasticsearch, OpenSearch) ou à une stratégie adaptée (ACORN dans Solr 10, paramètre `filteredSearchThreshold`).
 
-📸 `06-prefiltre.png` (terminal), `06-postfiltre-es.png` (Kibana).
+📸 `06-prefiltre.png`
+- **Où** : le terminal, après `clear`.
+- **Visible** : `make comparer Q="fromage à pâte molle" THEME=vin` et sa sortie complète : trois listes de dix cépages.
+- **Montre** : avec un préfiltre, on obtient toujours dix résultats, tous du thème demandé.
+
+📸 `06-postfiltre-es.png`
+- **Où** : la console de Kibana.
+- **Visible** : à gauche, la requête avec `knn` (vecteur replié) et `post_filter` ; à droite, la réponse avec `"total": { "value": 0 }` et `"hits": []`.
+- **Montre** : un post-filtre peut ne laisser aucun résultat.
 
 **Mes notes**
 
@@ -371,7 +436,15 @@ GET wikipedia-semantique/_mapping
 ```
 **À observer** : le premier document met une vingtaine de secondes (téléchargement et déploiement du modèle dans le cluster). Une simple requête `match` devient sémantique. Le mapping montre les réglages déduits du modèle (384 dimensions, cosinus).
 
-📸 `07-es-licence-refus.png` (l'erreur 403), `07-es-semantic.png` (la recherche `match` et ses résultats).
+📸 `07-es-licence-refus.png`
+- **Où** : la console de Kibana, licence `basic`.
+- **Visible** : à gauche, `PUT wikipedia-semantique/_doc/1` et son document ; à droite, la réponse d'erreur avec `"status": 403` et le message `current license is non-compliant for [inference]`.
+- **Montre** : `semantic_text` demande une licence payante.
+
+📸 `07-es-semantic.png`
+- **Où** : la console de Kibana, après activation de l'essai.
+- **Visible** : à gauche, `GET wikipedia-semantique/_search` avec `match` sur « spécialité normande au lait cru » ; à droite, les deux documents, le camembert en premier, avec leurs `_score`.
+- **Montre** : une simple requête `match` devient sémantique.
 
 ### OpenSearch : modèle préentraîné et champ `semantic`
 
@@ -412,7 +485,15 @@ Deux pièges rencontrés en montant ce laboratoire :
 - avec 1 Go de tas, le déploiement échoue (« Memory Circuit Breaker is open ») : le laboratoire donne 2 Go à OpenSearch ;
 - sans la variable `LD_PRELOAD` du `docker-compose.yml`, le nœud s'arrête à la première écriture dans un champ vectoriel une fois le modèle chargé : ml-commons charge le `libstdc++` ancien de PyTorch, puis la bibliothèque Faiss du plugin k-NN n'y trouve pas `GLIBCXX_3.4.20`.
 
-📸 `07-os-modele.png` (tâche de déploiement terminée), `07-os-semantic.png` (la recherche `neural` et ses résultats).
+📸 `07-os-modele.png`
+- **Où** : la console de Dashboards.
+- **Visible** : à gauche, `GET _plugins/_ml/tasks/<task_id du déploiement>` ; à droite, la réponse avec `"task_type": "DEPLOY_MODEL"` et `"state": "COMPLETED"`.
+- **Montre** : le modèle tourne dans le cluster OpenSearch.
+
+📸 `07-os-semantic.png`
+- **Où** : la console de Dashboards.
+- **Visible** : à gauche, la requête `neural` sur « spécialité normande au lait cru » ; à droite, les deux documents, le camembert en premier, avec leurs `_score`.
+- **Montre** : la même recherche sémantique, gratuite, dans OpenSearch.
 
 ### Solr : le module `language-models`
 
@@ -440,7 +521,11 @@ curl -s localhost:8983/solr/wikipedia/select \
 - Le préfixe E5 `query:` se met dans le texte de la requête : Solr transmet le texte tel quel.
 - Solr ne fait pas tourner de modèle lui-même : il appelle un service. Le guide de Solr qualifie le module d'expérimental.
 
-📸 `07-solr-texte.png` (requête `knn_text_to_vector` dans l'onglet *Query*).
+📸 `07-solr-texte.png`
+- **Où** : http://localhost:8983/solr/, collection `wikipedia`, *Query*.
+- **Requête** : dans `q`, `{!knn_text_to_vector model=e5-tei f=vecteur topK=10}query: spécialité normande au lait cru` ; dans `fl`, `titre,theme,score` ; puis *Execute Query*.
+- **Visible** : le formulaire, avec la requête en texte lisible, et le début de la réponse : les premiers fromages et leurs scores.
+- **Montre** : Solr vectorise lui-même la requête, en appelant TEI.
 
 | | Solr 10.0 | Elasticsearch 9.3 | OpenSearch 3.5 |
 |---|---|---|---|
