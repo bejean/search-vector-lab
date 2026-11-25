@@ -77,7 +77,9 @@ Le premier démarrage télécharge les images et le modèle (quelques minutes). 
 
 **Pourquoi** : la sécurité est désactivée sur les trois moteurs pour se concentrer sur la recherche ; les ports ne sont ouverts que sur la machine locale.
 
-📸 `01-solr-admin.png` (tableau de bord de Solr), `01-kibana.png` (console Dev Tools vide), `01-dashboards.png` (console Dev Tools vide).
+La console Dev Tools de Kibana et celle de Dashboards gardent leur contenu dans le stockage du navigateur, propre à chaque adresse : si un autre Kibana a déjà servi sur `localhost:5601`, la console affiche ses requêtes, et les effacer les perdrait. Utiliser alors un profil de navigateur dédié au laboratoire. À la première ouverture, la console contient un exemple de requête à effacer avant la capture.
+
+📸 `01-solr-admin.png` (tableau de bord de Solr), `01-kibana.png` (console Dev Tools, exemple effacé), `01-dashboards.png` (console Dev Tools, exemple effacé).
 
 **Mes notes**
 

@@ -33,6 +33,8 @@ make help      # toutes les commandes : stack, indexation, recherche, remise à 
 
 La sécurité des moteurs est désactivée : ce laboratoire est réservé à un usage local.
 
+Si un autre Kibana a déjà servi sur `localhost:5601`, utiliser un profil de navigateur dédié : la console Dev Tools garde son contenu par adresse dans le navigateur. Les ports 9200 et 5601 sont aussi ceux d'une installation Elasticsearch classique : arrêter une autre stack qui les publie avant `make up`.
+
 ## Contenu
 
 - `Makefile` : commandes du laboratoire (`make help`).
