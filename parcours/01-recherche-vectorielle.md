@@ -400,7 +400,7 @@ make comparer Q="peintre de paysages norvégien"
 
 ## Étape 6 : filtrer
 
-**Objectif** : comprendre la différence entre préfiltre et post-filtre, la question la plus fréquente en mission.
+**Objectif** : comprendre la différence entre préfiltre et post-filtre, et pourquoi elle change les résultats.
 
 **À faire**
 ```bash
